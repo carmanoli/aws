@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lab 10 — Auto Scaling Group</title><link rel="stylesheet" href="../../assets/styles.css"></head><body>
+<button class="menu-button" type="button">Menu</button><aside class="sidebar"><div class="brand"><a href="../../index.html"><strong>AWS Learning Labs</strong><span>Hands-on notes and experiments</span></a></div><nav><div class="nav-title">Start</div><a href="../../index.html">Home</a><div class="nav-title">Labs</div><a href="../lab-09-alb/index.html">09 · Application Load Balancer</a><a class="active" href="index.html">10 · Auto Scaling Group</a><div class="nav-title">Reference</div><a href="../../concepts/index.html">Concepts</a><a href="../../glossary.html">Glossary</a></nav></aside>
+<div class="content"><main><p class="eyebrow">Lab 10</p><h1>Auto Scaling Group with an Application Load Balancer</h1><p class="lead">Extend Lab 09 so AWS creates, replaces and removes EC2 instances automatically while an ALB distributes web traffic.</p>
+<p><span class="tag">EC2</span><span class="tag">Auto Scaling</span><span class="tag">CloudWatch</span><span class="tag">ALB</span></p>
+<h2>Objectives and final architecture</h2><pre><code>Internet
+   │
+Application Load Balancer
+   │
+Target Group · HTTP :80
+   │
+Auto Scaling Group
+   ├── EC2 · eu-north-1a
+   └── EC2 · eu-north-1b
+
+Minimum: 2 · Desired: 2 · Maximum: 4</code></pre><p>This lab practises launch templates, user data, EC2 and ELB health checks, target tracking, CloudWatch alarms, instance warmup, scale out, scale in and connection draining.</p>
+<h2>1. Confirm the Lab 09 environment</h2><ol class="steps"><li>Confirm that both Lab 09 EC2 instances are running.</li><li>Open <strong>EC2 → Load Balancers</strong> and confirm that <code>alb-web-lab9</code> is Active.</li><li>Open <code>tg-web-lab9</code> and confirm both targets are Healthy.</li><li>Open the ALB DNS name and refresh to verify that responses alternate between servers.</li></ol>
+<h2>2. Create a launch template</h2><p>A launch template describes how the Auto Scaling Group creates each new instance. Creating a template from an existing instance was not suitable because Apache had been installed manually and the copied user data was empty.</p><table><tr><th>Setting</th><th>Value</th></tr><tr><td>Name</td><td><code>LT-WebServer</code></td></tr><tr><td>AMI</td><td>Amazon Linux 2023</td></tr><tr><td>Instance type</td><td><code>t3.micro</code> or an available equivalent</td></tr><tr><td>Subnet</td><td>Do not select one here</td></tr><tr><td>Security group</td><td>The Lab 09 EC2 security group</td></tr><tr><td>Root volume</td><td>8 GiB gp3</td></tr></table><p>The EC2 security group must allow TCP port 80 from the ALB security group. If using Session Manager, also include the required IAM instance profile.</p>
+<h3>User data</h3><pre><code>#!/bin/bash
+dnf update -y
+dnf install -y httpd
+systemctl enable httpd
+systemctl start httpd
+
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+
+cat &lt;&lt;'HTML_EOF' &gt; /var/www/html/index.html
+&lt;html&gt;
+&lt;head&gt;&lt;title&gt;AWS Auto Scaling&lt;/title&gt;&lt;/head&gt;
+&lt;body style="font-family:Arial;text-align:center;margin-top:60px"&gt;
+&lt;h1&gt;AWS Auto Scaling Lab&lt;/h1&gt;
+&lt;h2&gt;Server created automatically&lt;/h2&gt;
+&lt;p&gt;&lt;b&gt;Instance ID:&lt;/b&gt; REPLACE_INSTANCE_ID&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+HTML_EOF
+
+sed -i "s/REPLACE_INSTANCE_ID/$INSTANCE_ID/g" /var/www/html/index.html</code></pre><p>This installs and starts Apache, retrieves the instance ID securely through IMDSv2 and creates a page identifying the server.</p>
+<h2>3. Create the Auto Scaling Group</h2><p>Open <strong>EC2 → Auto Scaling Groups → Create Auto Scaling group</strong>.</p><table><tr><th>Setting</th><th>Value</th></tr><tr><td>Name</td><td><code>ASG-WebServers</code></td></tr><tr><td>Launch template</td><td><code>LT-WebServer</code>, default version</td></tr><tr><td>VPC</td><td>The Lab 09 VPC</td></tr><tr><td>Subnets</td><td>ALB subnets in eu-north-1a and eu-north-1b</td></tr><tr><td>Load balancing</td><td>Attach existing <code>tg-web-lab9</code></td></tr><tr><td>Health checks</td><td>EC2 and Elastic Load Balancing</td></tr><tr><td>Grace period</td><td>120 seconds</td></tr><tr><td>Desired / minimum / maximum</td><td>2 / 2 / 4</td></tr></table>
+<div class="callout"><strong>Important:</strong> The ASG subnets must match Availability Zones enabled on the ALB. An instance launched in eu-north-1c appeared as <strong>Unused</strong> because the ALB was enabled only in eu-north-1a and eu-north-1b.</div>
+<h2>4. Verify automatic instance creation</h2><ol><li>Open <strong>ASG-WebServers → Instance management</strong>.</li><li>Confirm two instances show <strong>InService</strong> and <strong>Healthy</strong>.</li><li>Open the target group. During the transition it may contain two manually created instances and two ASG instances.</li><li>Open the ALB DNS name and refresh. Pages from new instances display their instance IDs.</li></ol><p>Normal startup states include Initial, Healthy, Unhealthy, Unused and Draining.</p>
+<h2>5. Fix an Unused target</h2><p>The ASG was initially configured with eu-north-1c, while the ALB used only eu-north-1a and eu-north-1b. Edit the ASG network settings, remove the eu-north-1c subnet and retain only the ALB-enabled subnets. The ASG will replace the incorrectly placed instance.</p>
+<h2>6. Configure target tracking</h2><p>Open <strong>ASG-WebServers → Automatic scaling → Create dynamic scaling policy</strong>:</p><table><tr><th>Setting</th><th>Value</th></tr><tr><td>Policy type</td><td>Target tracking scaling policy</td></tr><tr><td>Metric</td><td>Average CPU utilization</td></tr><tr><td>Target value</td><td>50%</td></tr><tr><td>Instance warmup</td><td>120 seconds</td></tr><tr><td>Scale in</td><td>Enabled</td></tr></table><p>For testing, the target was temporarily changed to 30%. With one instance at 100% and another close to 0%, average CPU is roughly 50%, which may not trigger a 50% target.</p>
+<h2>7. Generate CPU load</h2><p>Connect to one ASG-managed instance with Session Manager or SSH:</p><pre><code>sudo dnf install -y stress-ng
+cd /tmp
+stress-ng --cpu 2 --timeout 600s</code></pre><p>If <code>stress-ng</code> reports that its temporary path must be readable and writable, use:</p><pre><code>stress-ng --temp-path /tmp --cpu 2 --timeout 600s</code></pre><p>In a second session, run <code>top</code> and confirm that CPU usage is close to 100%.</p>
+<h2>8. Observe scale out</h2><p>Open the ASG Activity history. Expected events include a target-tracking alarm, desired capacity changing from 2 to 3 and a new EC2 instance launching.</p><p>During this test the ASG briefly reached four instances because the target was low, load rose quickly and new instances were still in their warmup period. This is normal in an aggressive scaling test.</p>
+<h2>9. Observe scale in</h2><p>Wait for the stress command to finish or stop it with <code>Ctrl+C</code>. When average CPU falls, the ASG gradually returns desired capacity to two. Instances may display <strong>Terminating</strong>, <strong>Draining</strong> or <strong>Waiting for ELB connection draining</strong> while existing connections finish.</p>
+<h2>10. Interpret the events</h2><ul><li><strong>TargetTracking in ALARM:</strong> average CPU exceeded the configured target.</li><li><strong>Launching a new EC2 instance:</strong> the ASG is adding capacity.</li><li><strong>Health check failure:</strong> the ASG removed an unhealthy instance and launched a replacement.</li><li><strong>Connection draining:</strong> the ALB is allowing active connections to finish before deregistration.</li></ul>
+<h2>11. Final architecture</h2><p>Once the ASG is working, remove the manually created Lab 09 instances from the target group and terminate them when no longer needed. A cleaner architecture contains only the ALB, target group, ASG and EC2 instances managed by the ASG.</p>
+<h2>Certification notes</h2><ul><li>The ALB sends traffic to healthy targets registered in its target group.</li><li>The launch template defines how new EC2 instances are created.</li><li>User data automates instance configuration.</li><li>The ASG maintains desired capacity and replaces unhealthy instances.</li><li>Target tracking keeps a selected metric close to a target value using CloudWatch alarms.</li><li>Instance warmup prevents new instances from influencing metrics too early.</li><li>The ASG and ALB should use aligned Availability Zones.</li></ul>
+<h2>Cleanup</h2><div class="warning callout"><strong>Avoid ongoing charges.</strong> Restore the CPU target to 50–60% if retaining the lab. Otherwise delete the ASG, launch template, manual instances, ALB and target group. Also check for remaining EBS volumes, Elastic IP addresses, snapshots and NAT gateways.</div><p>To pause the ASG before deleting it, set desired, minimum and maximum capacity to zero. This terminates ASG-managed instances.</p>
+<h2>Result</h2><p>The test demonstrated scale out from two to as many as four instances, scale in after load ended, automatic replacement following a health check failure and automatic registration of ASG instances with the ALB target group.</p>
+<div class="page-links"><a href="../lab-09-alb/index.html">← Lab 09</a><a href="../../concepts/index.html">Concepts →</a></div></main></div><script src="../../assets/site.js"></script></body></html>

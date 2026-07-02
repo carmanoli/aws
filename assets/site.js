@@ -1,0 +1,1 @@
+const button=document.querySelector('.menu-button');button?.addEventListener('click',()=>document.body.classList.toggle('menu-open'));document.querySelectorAll('.sidebar a').forEach(link=>link.addEventListener('click',()=>document.body.classList.remove('menu-open')));

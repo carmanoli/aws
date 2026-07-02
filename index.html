@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Hands-on AWS learning labs" />
+    <title>AWS Learning Labs</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <button class="menu-button" type="button">Menu</button>
+    <aside class="sidebar">
+      <div class="brand">
+        <a href="index.html"
+          ><strong>AWS Learning Labs</strong
+          ><span>Hands-on notes and experiments</span></a
+        >
+      </div>
+      <nav>
+        <div class="nav-title">Start</div>
+        <a class="active" href="index.html">Home</a>
+        <div class="nav-title">Labs</div>
+        <a href="labs/lab-09-alb/index.html">09 · Application Load Balancer</a
+        ><a href="labs/lab-10-auto-scaling/index.html"
+          >10 · Auto Scaling Group</a
+        >
+        <div class="nav-title">Reference</div>
+        <a href="concepts/index.html">Concepts</a
+        ><a href="glossary.html">Glossary</a>
+      </nav>
+    </aside>
+    <div class="content">
+      <main>
+        <p class="eyebrow">Learning journal</p>
+        <h1>AWS Learning Labs</h1>
+        <p class="lead">
+          A collection of practical AWS labs, lessons learned, troubleshooting
+          notes and certification reminders.
+        </p>
+        <div class="cards">
+          <article class="card">
+            <span class="tag">EC2</span><span class="tag">ELB</span>
+            <h2>Lab 09</h2>
+            <h3>Application Load Balancer</h3>
+            <p>
+              Distribute HTTP traffic across two EC2 instances and test health
+              checks and automatic failover.
+            </p>
+            <a href="labs/lab-09-alb/index.html">Open lab →</a>
+          </article>
+          <article class="card">
+            <span class="tag">EC2</span><span class="tag">Auto Scaling</span>
+            <h2>Lab 10</h2>
+            <h3>Auto Scaling Group</h3>
+            <p>
+              Automate instance creation and observe scale out, scale in and
+              replacement of unhealthy instances.
+            </p>
+            <a href="labs/lab-10-auto-scaling/index.html">Open lab →</a>
+          </article>
+        </div>
+        <h2>About this project</h2>
+        <p>
+          This is a plain static website made with HTML, CSS and a few lines of
+          JavaScript for the mobile menu. It requires no build process and can
+          be opened locally or published directly with GitHub Pages.
+        </p>
+        <div class="callout">
+          <strong>Cost reminder:</strong> Always complete the cleanup section
+          after a lab. Load balancers, EC2 instances, EBS volumes, Elastic IP
+          addresses and NAT gateways may generate charges.
+        </div>
+      </main>
+    </div>
+    <script src="assets/site.js"></script>
+  </body>
+</html>
