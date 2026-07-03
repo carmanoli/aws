@@ -1,0 +1,513 @@
+# Lab 12 – Application Load Balancer (ALB)
+
+## Objective
+
+The goal of this lab is to introduce an Application Load Balancer (ALB) in front of an existing EC2 web server.
+
+This lab adds only one new main concept: the Application Load Balancer.
+
+The existing infrastructure is reused:
+
+- IAM
+- EC2
+- Security Groups
+- EBS
+- S3
+- Launch Template
+- User Data
+- Apache
+- Git
+- GitHub repository deployment
+- Existing EC2 web server
+
+At the end of this lab, the website will be accessed through the ALB DNS name instead of directly through the EC2 public IP address.
+
+## Current Infrastructure
+
+Existing resources:
+
+| Resource Type | Name |
+|---|---|
+| Launch Template | `lab-web-template` |
+| EC2 Security Group | `lab-ec2-web-sg` |
+| EC2 Instance | `lab-web-server` |
+| GitHub Repository | `https://github.com/carmanoli/aws` |
+
+## New Resources Created in This Lab
+
+| Resource Type | Name |
+|---|---|
+| Target Group | `lab-web-tg` |
+| Application Load Balancer | `lab-web-alb` |
+| ALB Security Group | `lab-alb-sg` |
+
+## Final Architecture
+
+```text
+Internet
+   |
+   v
+Application Load Balancer
+lab-web-alb
+   |
+   v
+Target Group
+lab-web-tg
+   |
+   v
+EC2 Instance
+lab-web-server
+   |
+   v
+Apache Web Server
+   |
+   v
+Website deployed from GitHub
+```
+
+## Why Use an Application Load Balancer?
+
+An Application Load Balancer is used to distribute HTTP and HTTPS traffic to backend targets such as EC2 instances.
+
+In this lab, there is only one EC2 instance. However, placing an ALB in front of the instance prepares the infrastructure for future professional patterns such as:
+
+- Multiple EC2 instances
+- Auto Scaling Groups
+- Blue/green deployments
+- Centralized HTTP/HTTPS entry point
+- Health checks
+- TLS termination
+- Path-based routing
+- Host-based routing
+
+## Cost Awareness
+
+Application Load Balancers may generate costs because they are billed based on usage time and Load Balancer Capacity Units.
+
+To control costs in a learning environment:
+
+- Use only one ALB.
+- Delete the ALB after the lab if it is not needed.
+- Avoid creating unnecessary duplicate Load Balancers.
+- Keep only the resources required for the next lab.
+
+## Step 1 – Validate the Existing EC2 Website
+
+Before creating the ALB, confirm that the existing EC2 instance is working correctly.
+
+Go to:
+
+```text
+EC2 → Instances → lab-web-server
+```
+
+Open the EC2 public IPv4 address or public DNS name in the browser:
+
+```text
+http://EC2_PUBLIC_IP_OR_DNS
+```
+
+Expected result:
+
+```text
+The website deployed from GitHub is displayed successfully.
+```
+
+This is an important troubleshooting baseline. If the website works directly on EC2 before adding the ALB, then any later issue is likely related to the ALB, Target Group, Health Check, Subnets, or Security Groups.
+
+## Step 2 – Create the Target Group
+
+The Target Group is used by the ALB to know where to forward traffic.
+
+Go to:
+
+```text
+EC2 → Target Groups → Create target group
+```
+
+Configure the Target Group:
+
+| Option | Value |
+|---|---|
+| Target type | `Instances` |
+| Target group name | `lab-web-tg` |
+| Protocol | `HTTP` |
+| Port | `80` |
+| IP address type | `IPv4` |
+| VPC | Same VPC as `lab-web-server` |
+
+Health check configuration:
+
+| Option | Value |
+|---|---|
+| Health check protocol | `HTTP` |
+| Health check path | `/` |
+| Success codes | `200` |
+
+Register the existing EC2 instance:
+
+```text
+lab-web-server
+```
+
+Port:
+
+```text
+80
+```
+
+Click:
+
+```text
+Include as pending below
+```
+
+Then click:
+
+```text
+Create target group
+```
+
+At this stage, the target may show:
+
+```text
+Unused
+```
+
+This is normal because the Target Group is not yet associated with any Load Balancer.
+
+## Step 3 – Create the Application Load Balancer
+
+Go to:
+
+```text
+EC2 → Load Balancers → Create Load Balancer
+```
+
+Select:
+
+```text
+Application Load Balancer
+```
+
+Configure the ALB:
+
+| Option | Value |
+|---|---|
+| Load Balancer name | `lab-web-alb` |
+| Scheme | `Internet-facing` |
+| IP address type | `IPv4` |
+| VPC | Same VPC as the EC2 instance |
+| Availability Zones | At least two Availability Zones |
+
+Even with only one EC2 instance, the ALB must be placed in at least two subnets from different Availability Zones.
+
+## Step 4 – Create the ALB Security Group
+
+Create a new Security Group for the ALB.
+
+Security Group name:
+
+```text
+lab-alb-sg
+```
+
+Description:
+
+```text
+Security Group for Application Load Balancer
+```
+
+Inbound rule:
+
+| Type | Protocol | Port | Source |
+|---|---|---|---|
+| HTTP | TCP | 80 | `0.0.0.0/0` |
+
+Outbound rule:
+
+| Type | Destination |
+|---|---|
+| All traffic | Default |
+
+Professional best practice:
+
+- The ALB Security Group receives traffic from the Internet.
+- The EC2 Security Group should only receive HTTP traffic from the ALB Security Group.
+
+## Step 5 – Configure Listener and Routing
+
+In the ALB creation wizard, configure the listener:
+
+| Listener | Value |
+|---|---|
+| Protocol | `HTTP` |
+| Port | `80` |
+
+Default action:
+
+```text
+Forward to lab-web-tg
+```
+
+Click:
+
+```text
+Create Load Balancer
+```
+
+The ALB may initially show:
+
+```text
+Provisioning
+```
+
+After a few minutes, it should become:
+
+```text
+Active
+```
+
+## Step 6 – Check Target Health
+
+Go to:
+
+```text
+EC2 → Target Groups → lab-web-tg → Targets
+```
+
+The target may go through the following states:
+
+```text
+Unused → Initial → Healthy
+```
+
+In this lab, the target initially became:
+
+```text
+Unhealthy
+```
+
+Health status detail:
+
+```text
+Request timed out
+```
+
+This usually indicates that the ALB cannot reach the EC2 instance on port 80.
+
+## Step 7 – Update the EC2 Security Group
+
+Go to:
+
+```text
+EC2 → Security Groups → lab-ec2-web-sg → Inbound rules
+```
+
+Add or confirm the following rule:
+
+| Type | Protocol | Port | Source |
+|---|---|---|---|
+| HTTP | TCP | 80 | `lab-alb-sg` |
+
+The source should be the ALB Security Group ID, not manually typed text.
+
+Example:
+
+```text
+sg-xxxxxxxx / lab-alb-sg
+```
+
+This allows the ALB to send HTTP requests to the EC2 instance.
+
+After saving the rule, wait a few minutes and recheck the Target Group.
+
+Expected result:
+
+```text
+Healthy
+```
+
+## Step 8 – Test the Website Through the ALB
+
+Go to:
+
+```text
+EC2 → Load Balancers → lab-web-alb
+```
+
+Copy the ALB DNS name and open it in the browser:
+
+```text
+http://ALB_DNS_NAME
+```
+
+Expected result:
+
+```text
+The website is displayed successfully through the Application Load Balancer.
+```
+
+## Step 9 – Remove Direct HTTP Access to EC2
+
+After confirming that the website works through the ALB, direct HTTP access from the Internet to the EC2 instance is no longer required.
+
+In `lab-ec2-web-sg`, remove this rule if it exists:
+
+| Type | Port | Source |
+|---|---|---|
+| HTTP | 80 | `0.0.0.0/0` |
+
+Keep this rule instead:
+
+| Type | Port | Source |
+|---|---|---|
+| HTTP | 80 | `lab-alb-sg` |
+
+Optional SSH rule:
+
+| Type | Port | Source |
+|---|---|---|
+| SSH | 22 | Your public IP only |
+
+This follows the principle of least privilege.
+
+## Final Validation
+
+The final validation was successful:
+
+- The ALB reached the `Active` state.
+- The Target Group reported the EC2 instance as `Healthy`.
+- The website opened successfully through the ALB DNS name.
+- Direct HTTP access to EC2 was no longer required.
+- The EC2 Security Group allowed HTTP only from the ALB Security Group.
+
+## Troubleshooting Notes
+
+### Target Group shows `Unused`
+
+This is normal before the Target Group is associated with an ALB.
+
+### Target Group shows `Unhealthy`
+
+Check the Health status details.
+
+If the message is:
+
+```text
+Request timed out
+```
+
+Possible causes:
+
+- EC2 Security Group does not allow HTTP from the ALB Security Group.
+- Apache is not running.
+- The EC2 instance is in a different VPC.
+- The Target Group uses the wrong port.
+- Network ACLs are blocking traffic.
+
+### Target becomes Healthy after waiting
+
+This is normal. Health checks are not instant. After fixing Security Group rules, it may take one or more health check intervals before the target becomes Healthy.
+
+## Professional Best Practices Used
+
+### Separate Security Groups by Role
+
+Two different Security Groups were used:
+
+| Security Group | Responsibility |
+|---|---|
+| `lab-alb-sg` | Accept HTTP traffic from the Internet |
+| `lab-ec2-web-sg` | Accept HTTP traffic only from the ALB |
+
+This improves security and makes the architecture easier to understand and troubleshoot.
+
+### Use Target Groups Instead of Direct Instance Exposure
+
+The ALB forwards traffic to a Target Group instead of directly exposing backend instances.
+
+This prepares the architecture for future scaling and automation.
+
+### Use Health Checks
+
+The ALB continuously checks if the backend instance is healthy.
+
+This is essential in professional environments because unhealthy instances can be removed from traffic automatically.
+
+### Use Generic Resource Names
+
+All resources use reusable names with the `lab-` prefix:
+
+- `lab-web-alb`
+- `lab-web-tg`
+- `lab-alb-sg`
+- `lab-ec2-web-sg`
+- `lab-web-server`
+
+This naming convention allows the same resources to be reused in future labs.
+
+### Avoid Unnecessary Public Access to EC2
+
+After the ALB is working, the EC2 instance should not accept HTTP directly from the Internet.
+
+The public entry point should be the ALB.
+
+## Resources Created
+
+| Resource | Name |
+|---|---|
+| Application Load Balancer | `lab-web-alb` |
+| Target Group | `lab-web-tg` |
+| ALB Security Group | `lab-alb-sg` |
+
+## Resources Reused
+
+| Resource | Name |
+|---|---|
+| EC2 Instance | `lab-web-server` |
+| EC2 Security Group | `lab-ec2-web-sg` |
+| Launch Template | `lab-web-template` |
+| GitHub Repository | `https://github.com/carmanoli/aws` |
+
+## Cleanup Notes
+
+If this lab is not needed for the next exercise, delete the ALB to avoid unnecessary costs:
+
+```text
+EC2 → Load Balancers → lab-web-alb → Delete
+```
+
+After deleting the ALB, also delete the Target Group if it is no longer needed:
+
+```text
+EC2 → Target Groups → lab-web-tg → Delete
+```
+
+The Security Group `lab-alb-sg` can also be deleted if no Load Balancer is using it.
+
+Do not delete the EC2 instance, Launch Template, or GitHub deployment resources if they will be reused in the next lab.
+
+## Next Lab Suggestion
+
+The next incremental lab should introduce only one new concept.
+
+Recommended next lab:
+
+```text
+Lab 13 – Auto Scaling Group with Existing Launch Template and ALB Target Group
+```
+
+This would reuse:
+
+- `lab-web-template`
+- `lab-web-alb`
+- `lab-web-tg`
+- `lab-alb-sg`
+- `lab-ec2-web-sg`
+
+The new concept would be:
+
+```text
+Auto Scaling Group
+```
