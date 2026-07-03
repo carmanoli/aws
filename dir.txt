@@ -1,0 +1,17 @@
+ Volume in drive C has no label.
+ Volume Serial Number is F653-C19C
+
+ Directory of C:\Code\AWS
+
+2026-07-03  09:19    <DIR>          .
+2026-07-02  09:41    <DIR>          ..
+2026-07-02  17:02                 1 .nojekyll
+2026-07-02  17:01    <DIR>          assets
+2026-07-02  17:01    <DIR>          concepts
+2026-07-03  09:19                 0 dir.txt
+2026-07-02  16:59             2ÿ490 glossary.html
+2026-07-02  17:13             2ÿ915 index.html
+2026-07-02  17:01    <DIR>          labs
+2026-07-02  17:02               873 README.md
+               5 File(s)          6ÿ279 bytes
+               5 Dir(s)  173ÿ864ÿ353ÿ792 bytes free
