@@ -1,0 +1,633 @@
+# Lab 14 – Amazon CloudWatch Monitoring and Alarms
+
+## Objective
+
+In this lab, you will learn how to monitor AWS resources using Amazon CloudWatch.
+
+You will:
+
+- Explore CloudWatch metrics.
+- Understand namespaces and dimensions.
+- Monitor an EC2 instance.
+- Create a CloudWatch Alarm.
+- Generate CPU load.
+- Observe the alarm lifecycle.
+- Explore Application Load Balancer metrics.
+- Understand how CloudWatch integrates with other AWS services.
+
+This lab reuses the infrastructure built in previous labs.
+
+---
+
+# Previous Labs
+
+This lab assumes the following resources already exist:
+
+- IAM
+- EC2
+- Security Groups
+- EBS
+- S3
+- Launch Template
+- User Data
+- Apache
+- Git
+- GitHub
+- Target Group
+- Application Load Balancer
+- Route 53 (Conceptual)
+
+---
+
+# Existing Resources
+
+| Resource | Name |
+|----------|------|
+| EC2 Instance | lab-web-server |
+| Launch Template | lab-web-template |
+| EC2 Security Group | lab-ec2-web-sg |
+| ALB Security Group | lab-alb-sg |
+| Target Group | lab-web-tg |
+| Application Load Balancer | lab-web-alb |
+
+---
+
+# Architecture
+
+```
+                Internet
+                    │
+                    │
+          Application Load Balancer
+                    │
+                    │
+                 EC2 Instance
+                    │
+              Apache Web Server
+
+                    │
+                    ▼
+              CloudWatch Metrics
+                    │
+                    ▼
+            CloudWatch Alarm
+```
+
+---
+
+# Estimated Cost
+
+This lab is Free Tier friendly.
+
+CloudWatch provides EC2 basic monitoring at no additional cost.
+
+A single CloudWatch Alarm has a very small cost (only a few cents per month). Since it is created only for learning purposes and deleted afterwards, the overall cost is negligible.
+
+---
+
+# Part 1 – Explore CloudWatch
+
+Open
+
+```
+AWS Console
+→ CloudWatch
+→ Metrics
+```
+
+Click
+
+```
+All metrics
+```
+
+You should see several namespaces such as:
+
+- EC2
+- EBS
+- ApplicationELB
+- S3
+- KMS
+- Usage
+
+These namespaces are automatically created by AWS services.
+
+---
+
+# Understanding Namespaces
+
+Each AWS service publishes its own metrics into CloudWatch.
+
+Examples:
+
+| Service | Namespace |
+|----------|-----------|
+| EC2 | AWS/EC2 |
+| EBS | AWS/EBS |
+| ALB | AWS/ApplicationELB |
+| S3 | AWS/S3 |
+
+CloudWatch acts as a centralized metrics repository.
+
+---
+
+# Part 2 – Explore EC2 Metrics
+
+Open
+
+```
+CloudWatch
+→ Metrics
+→ EC2
+→ Per-Instance Metrics
+```
+
+Locate your running EC2 instance.
+
+Select
+
+```
+CPUUtilization
+```
+
+A graph displaying CPU utilization should appear.
+
+At idle, CPU usage is typically below:
+
+```
+1%
+```
+
+This is expected because only the operating system and Apache are running.
+
+---
+
+# Understanding CPUUtilization
+
+CPUUtilization represents the percentage of CPU currently being used.
+
+Typical values:
+
+| CPU | Meaning |
+|------|----------|
+| 0–10% | Idle |
+| 20–50% | Normal workload |
+| 70–80% | High utilization |
+| 90–100% | CPU saturation |
+
+---
+
+# Part 3 – Create a CloudWatch Alarm
+
+With CPUUtilization selected, click
+
+```
+Create alarm
+```
+
+Configure:
+
+Threshold type
+
+```
+Static
+```
+
+Condition
+
+```
+Greater than
+```
+
+Threshold
+
+```
+70
+```
+
+Leave the remaining options as default.
+
+Current configuration:
+
+Statistic
+
+```
+Average
+```
+
+Period
+
+```
+5 Minutes
+```
+
+Datapoints to alarm
+
+```
+1 out of 1
+```
+
+---
+
+# Alarm Logic
+
+This configuration means:
+
+```
+Average CPU
+
+>
+
+70%
+
+during
+
+1 evaluation period
+(5 minutes)
+```
+
+If true:
+
+```
+Alarm State
+
+↓
+
+ALARM
+```
+
+---
+
+# Part 4 – Notification
+
+Click
+
+```
+Next
+```
+
+Do not configure SNS yet.
+
+Remove any notification action.
+
+SNS will be covered in the next lab.
+
+---
+
+# Part 5 – Alarm Details
+
+Alarm name
+
+```
+lab-ec2-cpu-alarm
+```
+
+Description
+
+```
+CloudWatch alarm for EC2 CPU utilization above 70%.
+```
+
+Click
+
+```
+Create Alarm
+```
+
+---
+
+# Part 6 – Alarm States
+
+A CloudWatch Alarm can be in three states.
+
+## INSUFFICIENT_DATA
+
+CloudWatch does not yet have enough data.
+
+Usually seen:
+
+- Immediately after alarm creation
+- When an instance starts
+- When metrics are unavailable
+
+---
+
+## OK
+
+The metric is within the configured threshold.
+
+For this lab:
+
+```
+CPU ≤ 70%
+```
+
+---
+
+## ALARM
+
+The threshold has been exceeded.
+
+For this lab:
+
+```
+CPU > 70%
+```
+
+---
+
+# Part 7 – Generate CPU Load
+
+Connect to the EC2 instance.
+
+Update packages:
+
+```bash
+sudo dnf update -y
+```
+
+Install stress-ng:
+
+```bash
+sudo dnf install -y stress-ng
+```
+
+Verify installation:
+
+```bash
+stress-ng --version
+```
+
+Check the number of CPUs:
+
+```bash
+nproc
+```
+
+Example output:
+
+```
+2
+```
+
+Generate CPU load:
+
+```bash
+stress-ng --cpu 2 --timeout 600s
+```
+
+This command:
+
+- Uses both virtual CPUs
+- Runs for 10 minutes
+- Generates nearly 100% CPU utilization
+
+---
+
+# Part 8 – Observe the Alarm
+
+Open
+
+```
+CloudWatch
+→ Alarms
+```
+
+Watch the alarm transition:
+
+```
+INSUFFICIENT_DATA
+
+↓
+
+OK
+
+↓
+
+ALARM
+```
+
+When stress-ng finishes (or is stopped):
+
+```
+ALARM
+
+↓
+
+OK
+```
+
+This confirms the alarm is working correctly.
+
+---
+
+# Part 9 – Explore Application Load Balancer Metrics
+
+Open
+
+```
+CloudWatch
+→ Metrics
+→ ApplicationELB
+→ Per AppELB Metrics
+```
+
+Useful metrics include:
+
+- RequestCount
+- TargetResponseTime
+- HTTPCode_Target_2XX_Count
+- HTTPCode_Target_3XX_Count
+- HTTPCode_Target_4XX_Count
+- HTTPCode_Target_5XX_Count
+- ActiveConnectionCount
+- NewConnectionCount
+- ProcessedBytes
+
+---
+
+# Most Important ALB Metrics
+
+## RequestCount
+
+Number of HTTP requests received.
+
+Useful for:
+
+- Capacity planning
+- Traffic analysis
+
+---
+
+## TargetResponseTime
+
+Time required for the backend target to respond.
+
+Useful for:
+
+- Detecting slow applications
+- Performance monitoring
+
+---
+
+## HTTPCode_Target_2XX_Count
+
+Successful responses.
+
+Indicates normal application behavior.
+
+---
+
+## HTTPCode_Target_4XX_Count
+
+Client errors.
+
+Examples:
+
+- 400
+- 401
+- 403
+- 404
+
+Useful for identifying invalid requests or authentication problems.
+
+---
+
+## HTTPCode_Target_5XX_Count
+
+Server-side errors.
+
+Examples:
+
+- 500
+- 502
+- 503
+- 504
+
+One of the most important production monitoring metrics because it indicates application failures.
+
+---
+
+## ActiveConnectionCount
+
+Current open client connections.
+
+Useful for understanding live traffic.
+
+---
+
+## NewConnectionCount
+
+Number of newly established client connections.
+
+Useful for traffic trend analysis.
+
+---
+
+## ProcessedBytes
+
+Amount of data processed by the Load Balancer.
+
+Useful for bandwidth monitoring.
+
+---
+
+# CloudWatch Dashboards
+
+CloudWatch Dashboards provide a single monitoring interface.
+
+Example:
+
+```
++-------------------------------------------------------+
+| Requests/min      CPU EC2       Response Time          |
++-------------------------------------------------------+
+| ALB 5XX Errors    Healthy Hosts  Network In            |
++-------------------------------------------------------+
+| Auto Scaling      Disk Usage     Lambda Errors         |
++-------------------------------------------------------+
+```
+
+Dashboards allow operations teams to monitor an entire environment from one screen.
+
+---
+
+# CloudWatch Integration
+
+CloudWatch does not perform actions itself.
+
+It evaluates metrics and changes alarm states.
+
+Other AWS services react to these state changes.
+
+Typical integrations include:
+
+```
+CloudWatch Alarm
+        │
+        ├── Amazon SNS
+        ├── Auto Scaling
+        ├── AWS Lambda
+        ├── Systems Manager
+        └── EventBridge
+```
+
+This makes CloudWatch the foundation of monitoring and automation within AWS.
+
+---
+
+# Key Concepts Learned
+
+- Amazon CloudWatch
+- Metrics
+- Namespaces
+- Dimensions
+- EC2 Monitoring
+- CPUUtilization
+- CloudWatch Alarms
+- Static Thresholds
+- Alarm States
+- Application Load Balancer Metrics
+- Observability
+- Monitoring Best Practices
+
+---
+
+# Clean Up (Optional)
+
+To avoid unnecessary charges, delete the CloudWatch Alarm when finished.
+
+Open
+
+```
+CloudWatch
+→ Alarms
+```
+
+Select
+
+```
+lab-ec2-cpu-alarm
+```
+
+Click
+
+```
+Delete
+```
+
+---
+
+# What Comes Next
+
+The next lab introduces:
+
+**Lab 15 – Amazon SNS**
+
+Topics covered:
+
+- SNS Topics
+- Email Notifications
+- CloudWatch Alarm Integration
+- Real-time Alerting
+- Monitoring Best Practices
