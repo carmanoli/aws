@@ -1,0 +1,373 @@
+# Lab 13 – Amazon Route 53 (Conceptual) – Hosted Zone and Alias Record for an Application Load Balancer
+
+## Objective
+
+The purpose of this lab is to understand how Amazon Route 53 integrates with an Application Load Balancer (ALB).
+
+Since this is a conceptual lab, no real domain name is purchased. Instead, a public hosted zone is created using a fictitious domain to learn the complete configuration process while avoiding unnecessary costs.
+
+This approach allows the DNS architecture to be reproduced almost exactly as it would be implemented in a production environment.
+
+---
+
+# Architecture
+
+```
+Client
+   │
+   ▼
+lab.local
+   │
+   ▼
+Amazon Route 53
+Public Hosted Zone
+   │
+Alias Record (A)
+   │
+   ▼
+Application Load Balancer
+   │
+   ▼
+Target Group
+   │
+   ▼
+EC2 Instance
+```
+
+---
+
+# Existing Infrastructure
+
+The following AWS resources were created in previous labs and are reused without modification.
+
+* IAM
+* EC2
+* Security Groups
+* Amazon EBS
+* Amazon S3
+* Launch Template
+* User Data
+* Apache Web Server
+* Git
+* GitHub Automatic Deployment
+* Target Group (`lab-web-tg`)
+* Application Load Balancer (`lab-web-alb`)
+
+---
+
+# Why Route 53?
+
+In production environments, users never access applications through the AWS-generated ALB DNS name.
+
+Instead, they use a domain such as:
+
+```
+www.company.com
+```
+
+Amazon Route 53 is responsible for resolving that domain and directing traffic to the Application Load Balancer.
+
+This provides:
+
+* Friendly domain names
+* High availability
+* Integration with AWS services
+* Automatic DNS management
+* IPv4 and IPv6 support
+
+---
+
+# Step 1 – Open Route 53
+
+Open the AWS Management Console.
+
+Navigate to:
+
+```
+Route 53
+```
+
+Select:
+
+```
+Hosted zones
+```
+
+Click:
+
+```
+Create hosted zone
+```
+
+---
+
+# Step 2 – Create a Public Hosted Zone
+
+Configure the hosted zone as follows:
+
+| Setting     | Value              |
+| ----------- | ------------------ |
+| Domain name | lab.local          |
+| Type        | Public Hosted Zone |
+
+Click:
+
+```
+Create hosted zone
+```
+
+---
+
+# Automatically Created Records
+
+Route 53 automatically creates two DNS records.
+
+## NS Record
+
+The Name Server (NS) record contains four authoritative AWS DNS servers.
+
+Example:
+
+```
+ns-xxx.awsdns-xx.com
+ns-xxx.awsdns-xx.net
+ns-xxx.awsdns-xx.org
+ns-xxx.awsdns-xx.co.uk
+```
+
+In a real environment, these name servers would be configured at the domain registrar.
+
+---
+
+## SOA Record
+
+The Start of Authority (SOA) record contains information about the DNS zone, including:
+
+* Primary name server
+* Administrator information
+* Zone serial number
+* Refresh interval
+* Retry interval
+* Expiration
+* Default TTL
+
+This record is managed automatically by AWS.
+
+---
+
+# Step 3 – Create an Alias Record
+
+Inside the hosted zone, click:
+
+```
+Create record
+```
+
+Configure:
+
+| Setting                | Value                                 |
+| ---------------------- | ------------------------------------- |
+| Record Name            | (leave empty)                         |
+| Record Type            | A                                     |
+| Alias                  | Yes                                   |
+| Route Traffic To       | Application and Classic Load Balancer |
+| Region                 | Europe (Stockholm)                    |
+| Load Balancer          | lab-web-alb                           |
+| Routing Policy         | Simple Routing                        |
+| Evaluate Target Health | No                                    |
+
+Click:
+
+```
+Create records
+```
+
+---
+
+# Result
+
+The hosted zone now contains:
+
+* NS Record
+* SOA Record
+* A Alias Record
+
+The Alias Record points directly to the Application Load Balancer.
+
+---
+
+# Understanding Alias Records
+
+Unlike a traditional DNS A record, an Alias Record is an AWS-specific feature.
+
+Advantages include:
+
+* Can point directly to AWS resources
+* Can be used at the root domain
+* Automatically follows AWS infrastructure changes
+* Supports IPv4 and IPv6
+* Recommended by AWS
+
+---
+
+# Why Not Use a CNAME?
+
+A CNAME record has several limitations.
+
+It:
+
+* Cannot be used for the root domain
+* Adds an additional DNS lookup
+* Does not integrate directly with AWS resources
+
+For AWS resources such as:
+
+* Application Load Balancer
+* CloudFront
+* API Gateway
+* S3 Static Website
+* Global Accelerator
+
+AWS recommends using Alias Records instead.
+
+---
+
+# Inspecting the Alias Record
+
+The created Alias Record points to:
+
+```
+dualstack.lab-web-alb-xxxxxxxx.eu-north-1.elb.amazonaws.com
+```
+
+while the ALB itself has the DNS name:
+
+```
+lab-web-alb-xxxxxxxx.eu-north-1.elb.amazonaws.com
+```
+
+Notice the automatic addition of:
+
+```
+dualstack
+```
+
+This enables both:
+
+* IPv4
+* IPv6
+
+without requiring any additional configuration.
+
+---
+
+# DNS Resolution Flow
+
+```
+User Browser
+      │
+      ▼
+DNS Resolver
+      │
+      ▼
+Amazon Route 53
+      │
+      ▼
+Alias Record
+      │
+      ▼
+Application Load Balancer
+      │
+      ▼
+Target Group
+      │
+      ▼
+Healthy EC2 Instance
+```
+
+---
+
+# Why the DNS Points to the ALB
+
+The DNS record never points directly to an EC2 instance.
+
+Instead, it points to the Application Load Balancer because:
+
+* EC2 instances may be replaced by Auto Scaling.
+* EC2 public IP addresses may change.
+* The ALB continuously monitors instance health.
+* Traffic is automatically distributed only to healthy instances.
+
+This decouples DNS from the compute layer, improving availability and scalability.
+
+---
+
+# What Happens if an EC2 Instance is Replaced?
+
+Nothing changes in Route 53.
+
+The Alias Record still points to the ALB.
+
+The ALB automatically begins routing traffic to the new healthy instance once it passes the configured health checks.
+
+No DNS modification is required.
+
+---
+
+# What Happens if the ALB Infrastructure Changes?
+
+AWS may change the underlying IP addresses used by the Application Load Balancer.
+
+Again, no manual action is required.
+
+The Alias Record continues pointing to the ALB DNS name, while AWS manages the underlying infrastructure transparently.
+
+---
+
+# Conceptual Limitation of this Lab
+
+Because no real domain was purchased:
+
+* The hosted zone is not delegated on the Internet.
+* The configured domain cannot be resolved publicly.
+* The website cannot be accessed through `lab.local`.
+
+However, every configuration step is identical to a real production deployment.
+
+The only missing step would be configuring the Route 53 name servers at the domain registrar.
+
+---
+
+# AWS Services Reused
+
+* Amazon EC2
+* Security Groups
+* Target Group
+* Application Load Balancer
+* Launch Template
+* User Data
+* GitHub Deployment
+
+---
+
+# AWS Services Introduced
+
+* Amazon Route 53
+* Public Hosted Zones
+* Alias Records
+* NS Records
+* SOA Records
+
+---
+
+# Key Learning Outcomes
+
+After completing this lab, you should understand:
+
+* The role of Amazon Route 53.
+* The difference between a Hosted Zone and a domain registrar.
+* The purpose of NS and SOA records.
+* How Alias Records integrate with AWS resources.
+* Why Alias Records are preferred over CNAME records.
+* Why DNS should point to an Application Load Balancer instead of an EC2 instance.
+* How Route 53, ALB, Target Groups, and EC2 work together to provide a highly available web application architecture.
