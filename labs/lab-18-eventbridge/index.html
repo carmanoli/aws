@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Lab 18 - Amazon EventBridge Scheduler and AWS Lambda</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  color: #222;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px;
+  background-color: #ffffff;
+}
+h1, h2, h3 {
+  color: #1f2937;
+}
+h1 {
+  border-bottom: 3px solid #2563eb;
+  padding-bottom: 10px;
+}
+h2 {
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 6px;
+  margin-top: 35px;
+}
+code {
+  background-color: #f3f4f6;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+}
+pre {
+  background-color: #111827;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: Consolas, monospace;
+  font-size: 14px;
+}
+pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+.note {
+  background-color: #eff6ff;
+  border-left: 5px solid #2563eb;
+  padding: 12px 16px;
+  margin: 20px 0;
+}
+.warning {
+  background-color: #fffbeb;
+  border-left: 5px solid #f59e0b;
+  padding: 12px 16px;
+  margin: 20px 0;
+}
+.success {
+  background-color: #ecfdf5;
+  border-left: 5px solid #10b981;
+  padding: 12px 16px;
+  margin: 20px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 20px 0;
+}
+th, td {
+  border: 1px solid #d1d5db;
+  padding: 10px;
+  text-align: left;
+}
+th {
+  background-color: #f3f4f6;
+}
+</style>
+</head>
+<body>
+
+<h1>AWS Lab 18 – Amazon EventBridge Scheduler with AWS Lambda</h1>
+
+<h2>Objective</h2>
+
+<p>
+Learn how to invoke an AWS Lambda function automatically using
+Amazon EventBridge Scheduler.
+</p>
+
+<p>
+This lab introduces scheduled serverless execution while reusing the existing infrastructure built in previous labs.
+</p>
+
+<hr>
+
+<h2>Lab Architecture</h2>
+
+<pre>
+Amazon EventBridge Scheduler
+            │
+            ▼
+      IAM Execution Role
+            │
+            ▼
+AWS Lambda (lab-hello-lambda)
+            │
+            ▼
+     CloudWatch Logs
+</pre>
+
+<hr>
+
+<h2>Existing Infrastructure</h2>
+
+<ul>
+<li>IAM</li>
+<li>EC2</li>
+<li>Security Groups</li>
+<li>EBS</li>
+<li>S3</li>
+<li>Launch Template</li>
+<li>Apache</li>
+<li>Git</li>
+<li>GitHub</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Auto Scaling Group</li>
+<li>CloudWatch</li>
+<li>SNS</li>
+<li>AWS Lambda</li>
+<li>SNS → Lambda integration</li>
+</ul>
+
+<hr>
+
+<h2>Resources Used</h2>
+
+<table>
+<tr>
+<th>Resource</th>
+<th>Name</th>
+</tr>
+
+<tr>
+<td>Lambda Function</td>
+<td>lab-hello-lambda</td>
+</tr>
+
+<tr>
+<td>Schedule</td>
+<td>lab-lambda-schedule</td>
+</tr>
+
+<tr>
+<td>Region</td>
+<td>eu-north-1 (Europe - Stockholm)</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Step 1 - Open Amazon EventBridge Scheduler</h2>
+
+<ol>
+
+<li>Open the AWS Console.</li>
+
+<li>Search for:</li>
+
+<pre>EventBridge Scheduler</pre>
+
+<li>Open the service.</li>
+
+<li>Select:</li>
+
+<pre>Create schedule</pre>
+
+</ol>
+
+<hr>
+
+<h2>Step 2 - Configure Schedule Details</h2>
+
+<h3>Schedule Name</h3>
+
+<pre>lab-lambda-schedule</pre>
+
+<h3>Description</h3>
+
+<pre>Invoke lab Lambda every 5 minutes</pre>
+
+<h3>Schedule Group</h3>
+
+<pre>default</pre>
+
+<hr>
+
+<h2>Step 3 - Configure the Schedule Pattern</h2>
+
+Configure:
+
+<table>
+
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>Occurrence</td>
+<td>Recurring schedule</td>
+</tr>
+
+<tr>
+<td>Time Zone</td>
+<td>Europe/Lisbon</td>
+</tr>
+
+<tr>
+<td>Schedule Type</td>
+<td>Rate-based schedule</td>
+</tr>
+
+<tr>
+<td>Rate</td>
+<td>Every 5 minutes</td>
+</tr>
+
+<tr>
+<td>Flexible Time Window</td>
+<td>Off</td>
+</tr>
+
+</table>
+
+Leave the optional Start Date and End Date empty.
+
+<hr>
+
+<h2>Step 4 - Configure the Target</h2>
+
+Select:
+
+<pre>
+Target API:
+Templated targets
+</pre>
+
+Choose:
+
+<pre>
+AWS Lambda
+Invoke
+</pre>
+
+Lambda Function:
+
+<pre>
+lab-hello-lambda
+</pre>
+
+Payload:
+
+<pre>
+{}
+</pre>
+
+<hr>
+
+<h2>Step 5 - Configure Settings</h2>
+
+Leave the default values:
+
+<table>
+
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>Schedule State</td>
+<td>Enable</td>
+</tr>
+
+<tr>
+<td>Retry Policy</td>
+<td>Disabled</td>
+</tr>
+
+<tr>
+<td>Dead-letter Queue</td>
+<td>None</td>
+</tr>
+
+<tr>
+<td>Encryption</td>
+<td>AWS Managed Key</td>
+</tr>
+
+<tr>
+<td>Execution Role</td>
+<td>Create new role for this schedule</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Step 6 - Review and Create</h2>
+
+Review the configuration and select:
+
+<pre>Create schedule</pre>
+
+AWS automatically creates an IAM execution role allowing the Scheduler to invoke the Lambda function.
+
+<hr>
+
+<h2>Step 7 - Validate the Execution</h2>
+
+Wait approximately five minutes.
+
+Open:
+
+<pre>
+Lambda
+↓
+
+Functions
+
+↓
+
+lab-hello-lambda
+
+↓
+
+Monitor
+
+↓
+
+View CloudWatch Logs
+</pre>
+
+Open the latest log stream.
+
+A successful invocation should contain an event similar to:
+
+<pre>{
+  "version": "0",
+  "detail-type": "Scheduled Event",
+  "source": "aws.scheduler",
+  "region": "eu-north-1",
+  "detail": "{}"
+}</pre>
+
+The important fields are:
+
+<table>
+
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>source</td>
+<td>aws.scheduler</td>
+</tr>
+
+<tr>
+<td>detail-type</td>
+<td>Scheduled Event</td>
+</tr>
+
+<tr>
+<td>resource</td>
+<td>EventBridge Scheduler ARN</td>
+</tr>
+
+</table>
+
+This confirms that EventBridge Scheduler successfully invoked the Lambda function.
+
+<hr>
+
+<h2>Step 8 - Disable the Schedule</h2>
+
+To avoid unnecessary executions and costs:
+
+<pre>
+EventBridge Scheduler
+
+↓
+
+Schedules
+
+↓
+
+lab-lambda-schedule
+
+↓
+
+Disable
+</pre>
+
+The schedule remains available and can be enabled again later.
+
+<hr>
+
+<h2>Troubleshooting</h2>
+
+<h3>Lambda Function Does Not Appear</h3>
+
+Verify that you are using the correct AWS Region.
+
+This lab uses:
+
+<pre>eu-north-1 (Europe - Stockholm)</pre>
+
+If another region (such as us-east-1) is selected, the Lambda function will not appear.
+
+<h3>No Log Entries</h3>
+
+Verify:
+
+<ul>
+<li>The schedule is enabled.</li>
+<li>The Lambda function exists.</li>
+<li>The correct region is selected.</li>
+<li>Wait at least five minutes after creating the schedule.</li>
+</ul>
+
+<hr>
+
+<h2>Concepts Learned</h2>
+
+<ul>
+
+<li>Amazon EventBridge Scheduler</li>
+
+<li>Recurring schedules</li>
+
+<li>Rate-based scheduling</li>
+
+<li>Automatic Lambda invocation</li>
+
+<li>IAM execution roles</li>
+
+<li>CloudWatch Logs monitoring</li>
+
+<li>Scheduled serverless workloads</li>
+
+</ul>
+
+<hr>
+
+<h2>Architecture Achieved</h2>
+
+<pre>
+EventBridge Scheduler
+        │
+        ▼
+IAM Execution Role
+        │
+        ▼
+AWS Lambda
+        │
+        ▼
+CloudWatch Logs
+</pre>
+
+<hr>
+
+<h2>Key Takeaways</h2>
+
+<ul>
+
+<li>EventBridge Scheduler executes workloads at predefined intervals.</li>
+
+<li>The Scheduler uses an IAM execution role to invoke AWS services securely.</li>
+
+<li>A Lambda function can be triggered by multiple AWS services without changing its code.</li>
+
+<li>Scheduler-based automation is commonly used for maintenance tasks, reports, backups, monitoring, and scheduled serverless workloads.</li>
+
+</ul>
+
+<hr>
+
+<h2>Next Lab</h2>
+
+<p>
+Lab 19 will introduce <strong>Amazon EventBridge Rules</strong>, where Lambda functions will be triggered by real AWS events instead of scheduled executions, demonstrating event-driven architectures.
+</p>
+
+</body>
+</html>
