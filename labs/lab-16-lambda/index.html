@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab 16 - AWS Lambda</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 40px;
+      color: #222;
+      background-color: #fff;
+    }
+    h1, h2, h3 {
+      color: #1f2937;
+    }
+    code {
+      background-color: #f3f4f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    pre {
+      background-color: #f3f4f6;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    .note {
+      background-color: #eef6ff;
+      border-left: 4px solid #2563eb;
+      padding: 12px;
+      margin: 20px 0;
+    }
+    .warning {
+      background-color: #fff7ed;
+      border-left: 4px solid #f97316;
+      padding: 12px;
+      margin: 20px 0;
+    }
+    ul {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Lab 16 - AWS Lambda</h1>
+
+  <h2>1. Lab Objective</h2>
+  <p>
+    The objective of this lab is to introduce AWS Lambda as the first serverless computing service in this AWS learning path.
+    This lab focuses only on creating, understanding, and manually invoking a simple Lambda function using Python.
+  </p>
+
+  <p>
+    This lab prepares the infrastructure for future integrations with Amazon SNS, Amazon EventBridge, Amazon S3, and other event-driven AWS services.
+  </p>
+
+  <h2>2. Current Learning Path Context</h2>
+  <p>
+    This lab continues an incremental AWS infrastructure learning path focused on practical cloud skills and preparation for the AWS Solutions Architect Associate certification.
+  </p>
+
+  <p>Previously completed services and concepts include:</p>
+  <ul>
+    <li>IAM</li>
+    <li>EC2</li>
+    <li>Security Groups</li>
+    <li>EBS</li>
+    <li>S3</li>
+    <li>Launch Templates</li>
+    <li>User Data</li>
+    <li>Apache</li>
+    <li>Git and GitHub deployment</li>
+    <li>Application Load Balancer</li>
+    <li>Target Groups</li>
+    <li>Auto Scaling Group</li>
+    <li>Route 53 conceptual hosted zone and alias record</li>
+    <li>CloudWatch metrics and alarms</li>
+    <li>Amazon SNS topic and email subscription</li>
+  </ul>
+
+  <h2>3. Services Used</h2>
+  <ul>
+    <li>AWS Lambda</li>
+    <li>AWS IAM</li>
+    <li>Amazon CloudWatch Logs</li>
+  </ul>
+
+  <h2>4. Resources Created</h2>
+  <table border="1" cellpadding="8" cellspacing="0">
+    <tr>
+      <th>Resource Type</th>
+      <th>Name</th>
+      <th>Purpose</th>
+    </tr>
+    <tr>
+      <td>Lambda Function</td>
+      <td><code>lab-hello-lambda</code></td>
+      <td>Simple Python function used to understand Lambda invocations</td>
+    </tr>
+    <tr>
+      <td>IAM Execution Role</td>
+      <td>Automatically created by AWS</td>
+      <td>Allows the Lambda function to write logs to CloudWatch Logs</td>
+    </tr>
+    <tr>
+      <td>CloudWatch Log Group</td>
+      <td><code>/aws/lambda/lab-hello-lambda</code></td>
+      <td>Stores Lambda execution logs</td>
+    </tr>
+  </table>
+
+  <h2>5. Architecture</h2>
+  <pre>
+User
+  |
+  v
+AWS Lambda Function
+  |
+  v
+CloudWatch Logs
+  </pre>
+
+  <p>
+    In this lab, the Lambda function is invoked manually from the AWS Lambda console.
+    No external trigger is configured yet.
+  </p>
+
+  <h2>6. Serverless Computing Concept</h2>
+  <p>
+    AWS Lambda is a serverless compute service that allows code to run without provisioning or managing servers.
+    With Lambda, the cloud provider manages the infrastructure, operating system, scaling, availability, and execution environment.
+  </p>
+
+  <p>In a traditional server-based model, you usually manage:</p>
+  <ul>
+    <li>Servers</li>
+    <li>Operating systems</li>
+    <li>Runtime installation</li>
+    <li>Patching</li>
+    <li>Scaling</li>
+    <li>High availability</li>
+  </ul>
+
+  <p>With AWS Lambda, you focus mainly on:</p>
+  <ul>
+    <li>Writing code</li>
+    <li>Defining permissions</li>
+    <li>Configuring triggers</li>
+    <li>Monitoring executions</li>
+  </ul>
+
+  <div class="note">
+    Lambda is commonly used in event-driven architectures, automation tasks, data processing, API backends, security workflows, and integration between AWS services.
+  </div>
+
+  <h2>7. Step-by-Step Implementation</h2>
+
+  <h3>Step 1 - Open AWS Lambda</h3>
+  <ol>
+    <li>Open the AWS Management Console.</li>
+    <li>Go to <code>Services</code>.</li>
+    <li>Search for <code>Lambda</code>.</li>
+    <li>Open the AWS Lambda service.</li>
+  </ol>
+
+  <h3>Step 2 - Create the Lambda Function</h3>
+  <ol>
+    <li>Click <code>Create function</code>.</li>
+    <li>Select <code>Author from scratch</code>.</li>
+    <li>Configure the function:</li>
+  </ol>
+
+  <ul>
+    <li>Function name: <code>lab-hello-lambda</code></li>
+    <li>Runtime: <code>Python 3.13</code></li>
+    <li>Architecture: <code>x86_64</code></li>
+  </ul>
+
+  <p>In the permissions section, select:</p>
+
+  <pre>Create a new role with basic Lambda permissions</pre>
+
+  <p>
+    This allows AWS to automatically create an IAM execution role with the minimum permissions required for the function to write logs to CloudWatch Logs.
+  </p>
+
+  <p>Click <code>Create function</code>.</p>
+
+  <h2>8. Initial Lambda Code</h2>
+  <p>After the function is created, AWS provides a default Python code structure similar to this:</p>
+
+  <pre><code>import json
+
+def lambda_handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }</code></pre>
+
+  <h2>9. Understanding the Lambda Handler</h2>
+
+  <h3>Handler</h3>
+  <p>
+    The handler is the function that AWS Lambda executes when the Lambda function is invoked.
+  </p>
+
+  <p>In this lab, the handler is:</p>
+
+  <pre><code>lambda_handler</code></pre>
+
+  <p>The full handler reference is usually:</p>
+
+  <pre><code>lambda_function.lambda_handler</code></pre>
+
+  <p>This means:</p>
+  <ul>
+    <li><code>lambda_function</code> is the Python file name.</li>
+    <li><code>lambda_handler</code> is the function name inside the file.</li>
+  </ul>
+
+  <h3>event</h3>
+  <p>
+    The <code>event</code> parameter contains the data passed to the Lambda function during invocation.
+  </p>
+
+  <p>Examples of future event sources include:</p>
+  <ul>
+    <li>Amazon SNS messages</li>
+    <li>Amazon S3 object upload events</li>
+    <li>Amazon EventBridge scheduled events</li>
+    <li>API Gateway HTTP requests</li>
+    <li>DynamoDB Streams records</li>
+  </ul>
+
+  <h3>context</h3>
+  <p>
+    The <code>context</code> parameter contains runtime information about the current invocation.
+  </p>
+
+  <p>It can include information such as:</p>
+  <ul>
+    <li>Function name</li>
+    <li>Request ID</li>
+    <li>Remaining execution time</li>
+    <li>Memory configuration</li>
+    <li>Log stream name</li>
+  </ul>
+
+  <h2>10. First Test Invocation</h2>
+
+  <ol>
+    <li>Click <code>Test</code>.</li>
+    <li>If prompted, create a new test event.</li>
+    <li>Use the event name <code>test-event</code>.</li>
+    <li>Use the <code>Hello World</code> template.</li>
+    <li>Click <code>Save</code>.</li>
+    <li>Click <code>Test</code> again.</li>
+  </ol>
+
+  <p>Expected result:</p>
+
+  <pre><code>Status: Succeeded</code></pre>
+
+  <p>Expected response body:</p>
+
+  <pre><code>"Hello from Lambda!"</code></pre>
+
+  <h2>11. Lambda Invocation Flow</h2>
+
+  <pre>
+User starts test invocation
+  |
+  v
+AWS Lambda receives the event
+  |
+  v
+Lambda prepares an execution environment if needed
+  |
+  v
+Python runtime is loaded
+  |
+  v
+lambda_handler(event, context) is executed
+  |
+  v
+Logs are written to CloudWatch Logs
+  |
+  v
+The function returns a response
+  </pre>
+
+  <h2>12. Cold Start and Warm Start</h2>
+
+  <h3>Cold Start</h3>
+  <p>
+    A cold start happens when Lambda needs to create a new execution environment before running the function.
+    This can add a small amount of latency to the first invocation.
+  </p>
+
+  <h3>Warm Start</h3>
+  <p>
+    A warm start happens when Lambda reuses an existing execution environment from a previous invocation.
+    This usually makes the function start faster.
+  </p>
+
+  <h2>13. Updating the Function Code</h2>
+
+  <p>Replace the default function code with the following:</p>
+
+  <pre><code>import json
+
+def lambda_handler(event, context):
+
+    name = event.get("name", "World")
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps(f"Hello {name}!")
+    }</code></pre>
+
+  <p>Click <code>Deploy</code> to save and deploy the updated code.</p>
+
+  <h2>14. Testing with a Custom Event</h2>
+
+  <p>Edit the test event and replace its JSON with:</p>
+
+  <pre><code>{
+  "name": "Carlos"
+}</code></pre>
+
+  <p>Click <code>Save</code> and then click <code>Test</code>.</p>
+
+  <p>Expected response body:</p>
+
+  <pre><code>"Hello Carlos!"</code></pre>
+
+  <h2>15. Understanding the Updated Code</h2>
+
+  <pre><code>name = event.get("name", "World")</code></pre>
+
+  <p>
+    This line reads the <code>name</code> key from the event object.
+    If the key exists, its value is used.
+    If the key does not exist, the default value <code>World</code> is used.
+  </p>
+
+  <p>With this test event:</p>
+
+  <pre><code>{
+  "name": "Carlos"
+}</code></pre>
+
+  <p>The function returns:</p>
+
+  <pre><code>Hello Carlos!</code></pre>
+
+  <h2>16. IAM Execution Role</h2>
+
+  <p>
+    The Lambda function does not use the IAM permissions of the user who created it.
+    Instead, it uses its own IAM execution role.
+  </p>
+
+  <p>
+    In this lab, AWS automatically created a role with basic Lambda permissions.
+    These permissions allow the function to write logs to CloudWatch Logs.
+  </p>
+
+  <p>Typical basic permissions include:</p>
+
+  <ul>
+    <li>Create log groups</li>
+    <li>Create log streams</li>
+    <li>Put log events</li>
+  </ul>
+
+  <div class="note">
+    In professional environments, Lambda permissions should follow the principle of least privilege. A Lambda function should only receive the permissions required to perform its task.
+  </div>
+
+  <h2>17. CloudWatch Logs</h2>
+
+  <p>
+    Every Lambda invocation can generate logs in Amazon CloudWatch Logs.
+    This is essential for troubleshooting, auditing, and monitoring serverless applications.
+  </p>
+
+  <p>The log group created for this function follows this format:</p>
+
+  <pre><code>/aws/lambda/lab-hello-lambda</code></pre>
+
+  <p>Logs are useful to inspect:</p>
+  <ul>
+    <li>Invocation start and end</li>
+    <li>Execution duration</li>
+    <li>Errors</li>
+    <li>Printed debug messages</li>
+    <li>Request IDs</li>
+  </ul>
+
+  <h2>18. Professional Best Practices</h2>
+
+  <ul>
+    <li>Use clear and consistent naming conventions, such as <code>lab-...</code>.</li>
+    <li>Apply the principle of least privilege to Lambda execution roles.</li>
+    <li>Use CloudWatch Logs for troubleshooting and operational visibility.</li>
+    <li>Keep functions small and focused on a single responsibility.</li>
+    <li>Use environment variables instead of hardcoding configuration values.</li>
+    <li>Monitor errors, duration, throttles, and invocation count.</li>
+    <li>Use Infrastructure as Code for production deployments.</li>
+    <li>Avoid giving Lambda functions broad permissions such as full access policies.</li>
+  </ul>
+
+  <h2>19. Certification Notes for AWS SAA-C03</h2>
+
+  <p>Important concepts for the AWS Solutions Architect Associate exam:</p>
+
+  <ul>
+    <li>Lambda is a serverless compute service.</li>
+    <li>Lambda automatically scales based on the number of incoming events.</li>
+    <li>Lambda functions are invoked by events.</li>
+    <li>Each function uses an IAM execution role.</li>
+    <li>Lambda integrates natively with CloudWatch Logs.</li>
+    <li>Lambda is commonly used with SNS, S3, EventBridge, SQS, DynamoDB Streams, and API Gateway.</li>
+    <li>Lambda is suitable for short-running, event-driven workloads.</li>
+    <li>Lambda is not ideal for long-running processes that exceed the maximum execution duration.</li>
+  </ul>
+
+  <h2>20. Cost Considerations</h2>
+
+  <p>
+    AWS Lambda includes a generous free tier. This lab uses only manual test invocations and very small amounts of compute time.
+    The expected cost for this lab is effectively zero under normal Free Tier usage.
+  </p>
+
+  <p>
+    CloudWatch Logs may store a small amount of log data. For this lab, the volume is minimal.
+  </p>
+
+  <div class="warning">
+    To avoid unnecessary costs in long-term environments, remove unused Lambda functions and CloudWatch log groups when they are no longer needed.
+  </div>
+
+  <h2>21. Cleanup</h2>
+
+  <p>
+    Since this function will be reused in future labs, it can be kept active.
+  </p>
+
+  <p>If you want to delete it later:</p>
+
+  <ol>
+    <li>Open AWS Lambda.</li>
+    <li>Select <code>lab-hello-lambda</code>.</li>
+    <li>Click <code>Actions</code>.</li>
+    <li>Choose <code>Delete function</code>.</li>
+  </ol>
+
+  <p>Optionally, also delete the associated CloudWatch Log Group:</p>
+
+  <pre><code>/aws/lambda/lab-hello-lambda</code></pre>
+
+  <h2>22. Lab Summary</h2>
+
+  <p>In this lab, the following tasks were completed:</p>
+
+  <ul>
+    <li>Opened the AWS Lambda service.</li>
+    <li>Created a Lambda function named <code>lab-hello-lambda</code>.</li>
+    <li>Used the Python runtime.</li>
+    <li>Allowed AWS to create a basic IAM execution role.</li>
+    <li>Reviewed the default Lambda handler.</li>
+    <li>Executed the first manual test invocation.</li>
+    <li>Updated the Lambda code to read input from the <code>event</code> object.</li>
+    <li>Created a custom test event.</li>
+    <li>Executed the function with custom input.</li>
+    <li>Introduced CloudWatch Logs integration.</li>
+    <li>Reviewed serverless and event-driven architecture concepts.</li>
+  </ul>
+
+  <h2>23. Next Lab</h2>
+
+  <p>
+    The next lab will integrate AWS Lambda with Amazon SNS.
+    The existing SNS topic <code>lab-cloudwatch-topic</code> will be used to trigger the Lambda function automatically when a message is published.
+  </p>
+
+  <p>Next lab:</p>
+
+  <pre><code>Lab 17 - AWS Lambda with Amazon SNS</code></pre>
+
+</body>
+</html>

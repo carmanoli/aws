@@ -1,24 +1,40 @@
-# Lab 15 - Amazon SNS Integration with CloudWatch
-
-## Objective
-
-In this lab, we integrate Amazon Simple Notification Service (SNS) with an existing Amazon CloudWatch Alarm to receive email notifications whenever the alarm changes state.
-
-By the end of this lab you will have:
-
-- Created an SNS Standard Topic
-- Created an email subscription
-- Confirmed the subscription
-- Integrated the existing CloudWatch Alarm with SNS
-- Received email notifications when the alarm enters the ALARM state
-- Received email notifications when the alarm returns to the OK state
-
----
-
-# Architecture
-
-```text
-                +----------------+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 15 - Amazon SNS Integration with CloudWatch</title>
+<style>
+body { font-family: Arial, sans-serif; line-height: 1.6; color: #222; max-width: 1100px; margin: 0 auto; padding: 30px; background-color: #ffffff; }
+h1, h2, h3 { color: #1f2937; }
+h1 { border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+h2 { border-bottom: 1px solid #d1d5db; padding-bottom: 6px; margin-top: 35px; }
+code { background-color: #f3f4f6; padding: 2px 5px; border-radius: 4px; font-family: Consolas, monospace; }
+pre { background-color: #111827; color: #f9fafb; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: Consolas, monospace; font-size: 14px; }
+pre code { background-color: transparent; color: inherit; padding: 0; border-radius: 0; }
+.note { background-color: #eff6ff; border-left: 5px solid #2563eb; padding: 12px 16px; margin: 20px 0; }
+.warning { background-color: #fffbeb; border-left: 5px solid #f59e0b; padding: 12px 16px; margin: 20px 0; }
+.success { background-color: #ecfdf5; border-left: 5px solid #10b981; padding: 12px 16px; margin: 20px 0; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+th { background-color: #f3f4f6; }
+</style></head>
+<body>
+<h1 id="lab-15-amazon-sns-integration-with-cloudwatch">Lab 15 - Amazon SNS Integration with CloudWatch</h1>
+<h2 id="objective">Objective</h2>
+<p>In this lab, we integrate Amazon Simple Notification Service (SNS) with an existing Amazon CloudWatch Alarm to receive email notifications whenever the alarm changes state.</p>
+<p>By the end of this lab you will have:</p>
+<ul>
+<li>Created an SNS Standard Topic</li>
+<li>Created an email subscription</li>
+<li>Confirmed the subscription</li>
+<li>Integrated the existing CloudWatch Alarm with SNS</li>
+<li>Received email notifications when the alarm enters the ALARM state</li>
+<li>Received email notifications when the alarm returns to the OK state</li>
+</ul>
+<hr />
+<h1 id="architecture">Architecture</h1>
+<pre><code class="language-text">                +----------------+
                 |     EC2        |
                 +----------------+
                         |
@@ -43,249 +59,217 @@ By the end of this lab you will have:
             |                       |
             ▼                       ▼
       Email Notification      Future Subscribers
-```
-
----
-
-# Existing Infrastructure
-
-The following resources were reused from previous labs:
-
-- EC2 Instance
-- CloudWatch Alarm
-- Application Load Balancer
-- Target Group
-- Launch Template
-- Security Groups
-- GitHub automatic deployment
-- Apache Web Server
-
-Existing CloudWatch Alarm:
-
-```
-lab-ec2-cpu-alarm
-```
-
----
-
-# Why Amazon SNS?
-
-Amazon SNS (Simple Notification Service) is a fully managed publish/subscribe messaging service.
-
-Instead of CloudWatch sending notifications directly to users, it publishes messages to an SNS Topic.
-
-Any number of subscribers can receive those messages.
-
-Typical subscribers include:
-
-- Email
-- SMS
-- AWS Lambda
-- Amazon SQS
-- HTTPS endpoints
-- AWS Chatbot
-- Mobile Push Notifications
-
-This decouples monitoring from notification delivery.
-
----
-
-# Step 1 - Create an SNS Topic
-
-Open:
-
-```
-AWS Console
+</code></pre>
+<hr />
+<h1 id="existing-infrastructure">Existing Infrastructure</h1>
+<p>The following resources were reused from previous labs:</p>
+<ul>
+<li>EC2 Instance</li>
+<li>CloudWatch Alarm</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Launch Template</li>
+<li>Security Groups</li>
+<li>GitHub automatic deployment</li>
+<li>Apache Web Server</li>
+</ul>
+<p>Existing CloudWatch Alarm:</p>
+<pre><code>lab-ec2-cpu-alarm
+</code></pre>
+<hr />
+<h1 id="why-amazon-sns">Why Amazon SNS?</h1>
+<p>Amazon SNS (Simple Notification Service) is a fully managed publish/subscribe messaging service.</p>
+<p>Instead of CloudWatch sending notifications directly to users, it publishes messages to an SNS Topic.</p>
+<p>Any number of subscribers can receive those messages.</p>
+<p>Typical subscribers include:</p>
+<ul>
+<li>Email</li>
+<li>SMS</li>
+<li>AWS Lambda</li>
+<li>Amazon SQS</li>
+<li>HTTPS endpoints</li>
+<li>AWS Chatbot</li>
+<li>Mobile Push Notifications</li>
+</ul>
+<p>This decouples monitoring from notification delivery.</p>
+<hr />
+<h1 id="step-1-create-an-sns-topic">Step 1 - Create an SNS Topic</h1>
+<p>Open:</p>
+<pre><code>AWS Console
 → SNS
 → Topics
 → Create topic
-```
-
-Configuration:
-
-| Setting | Value |
-|----------|-------|
-| Type | Standard |
-| Name | lab-cloudwatch-topic |
-
-Leave all other settings as default.
-
-Click:
-
-```
-Create topic
-```
-
----
-
-# Why Standard Instead of FIFO?
-
-CloudWatch alarm notifications do not require:
-
-- Message ordering
-- Deduplication
-- Exactly-once processing
-
-Therefore, a Standard Topic is the recommended option.
-
-FIFO topics are intended for transactional workloads and ordered message processing.
-
----
-
-# Step 2 - Create an Email Subscription
-
-Open:
-
-```
-SNS
+</code></pre>
+<p>Configuration:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Type</td>
+<td>Standard</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>lab-cloudwatch-topic</td>
+</tr>
+</tbody>
+</table>
+<p>Leave all other settings as default.</p>
+<p>Click:</p>
+<pre><code>Create topic
+</code></pre>
+<hr />
+<h1 id="why-standard-instead-of-fifo">Why Standard Instead of FIFO?</h1>
+<p>CloudWatch alarm notifications do not require:</p>
+<ul>
+<li>Message ordering</li>
+<li>Deduplication</li>
+<li>Exactly-once processing</li>
+</ul>
+<p>Therefore, a Standard Topic is the recommended option.</p>
+<p>FIFO topics are intended for transactional workloads and ordered message processing.</p>
+<hr />
+<h1 id="step-2-create-an-email-subscription">Step 2 - Create an Email Subscription</h1>
+<p>Open:</p>
+<pre><code>SNS
 → Topics
 → lab-cloudwatch-topic
 → Create subscription
-```
-
-Configuration:
-
-| Setting | Value |
-|----------|-------|
-| Protocol | Email |
-| Endpoint | Your email address |
-
-Click:
-
-```
-Create subscription
-```
-
-The subscription status will initially be:
-
-```
-Pending confirmation
-```
-
----
-
-# Step 3 - Confirm the Subscription
-
-Open your email inbox.
-
-AWS sends a confirmation email similar to:
-
-```
-AWS Notification - Subscription Confirmation
-```
-
-Click:
-
-```
-Confirm subscription
-```
-
-Refresh the SNS console.
-
-The subscription status should now be:
-
-```
-Confirmed
-```
-
----
-
-# Step 4 - Integrate CloudWatch Alarm with SNS
-
-Open:
-
-```
-CloudWatch
+</code></pre>
+<p>Configuration:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Protocol</td>
+<td>Email</td>
+</tr>
+<tr>
+<td>Endpoint</td>
+<td>Your email address</td>
+</tr>
+</tbody>
+</table>
+<p>Click:</p>
+<pre><code>Create subscription
+</code></pre>
+<p>The subscription status will initially be:</p>
+<pre><code>Pending confirmation
+</code></pre>
+<hr />
+<h1 id="step-3-confirm-the-subscription">Step 3 - Confirm the Subscription</h1>
+<p>Open your email inbox.</p>
+<p>AWS sends a confirmation email similar to:</p>
+<pre><code>AWS Notification - Subscription Confirmation
+</code></pre>
+<p>Click:</p>
+<pre><code>Confirm subscription
+</code></pre>
+<p>Refresh the SNS console.</p>
+<p>The subscription status should now be:</p>
+<pre><code>Confirmed
+</code></pre>
+<hr />
+<h1 id="step-4-integrate-cloudwatch-alarm-with-sns">Step 4 - Integrate CloudWatch Alarm with SNS</h1>
+<p>Open:</p>
+<pre><code>CloudWatch
 → Alarms
 → lab-ec2-cpu-alarm
 → Actions
 → Edit
-```
-
-Configure the notification for the ALARM state:
-
-| Setting | Value |
-|----------|-------|
-| Alarm State | In alarm |
-| Notification | Send to existing SNS Topic |
-| SNS Topic | lab-cloudwatch-topic |
-
-Save the changes.
-
----
-
-# Step 5 - Configure Notification for the OK State
-
-Edit the same alarm again.
-
-Configure:
-
-| Setting | Value |
-|----------|-------|
-| OK State | Send notification |
-| SNS Topic | lab-cloudwatch-topic |
-
-Save the changes.
-
-Now notifications will be sent whenever the alarm:
-
-- Enters ALARM
-- Returns to OK
-
----
-
-# Step 6 - Generate CPU Load
-
-Generate CPU load on the EC2 instance.
-
-Example:
-
-```bash
-stress-ng --cpu 2 --timeout 600s
-```
-
-CloudWatch continuously monitors CPU utilization.
-
-Once the configured threshold is exceeded:
-
-```
-CloudWatch Alarm
+</code></pre>
+<p>Configure the notification for the ALARM state:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alarm State</td>
+<td>In alarm</td>
+</tr>
+<tr>
+<td>Notification</td>
+<td>Send to existing SNS Topic</td>
+</tr>
+<tr>
+<td>SNS Topic</td>
+<td>lab-cloudwatch-topic</td>
+</tr>
+</tbody>
+</table>
+<p>Save the changes.</p>
+<hr />
+<h1 id="step-5-configure-notification-for-the-ok-state">Step 5 - Configure Notification for the OK State</h1>
+<p>Edit the same alarm again.</p>
+<p>Configure:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OK State</td>
+<td>Send notification</td>
+</tr>
+<tr>
+<td>SNS Topic</td>
+<td>lab-cloudwatch-topic</td>
+</tr>
+</tbody>
+</table>
+<p>Save the changes.</p>
+<p>Now notifications will be sent whenever the alarm:</p>
+<ul>
+<li>Enters ALARM</li>
+<li>Returns to OK</li>
+</ul>
+<hr />
+<h1 id="step-6-generate-cpu-load">Step 6 - Generate CPU Load</h1>
+<p>Generate CPU load on the EC2 instance.</p>
+<p>Example:</p>
+<pre><code class="language-bash">stress-ng --cpu 2 --timeout 600s
+</code></pre>
+<p>CloudWatch continuously monitors CPU utilization.</p>
+<p>Once the configured threshold is exceeded:</p>
+<pre><code>CloudWatch Alarm
 → ALARM
-```
-
-An email notification is sent.
-
-After CPU usage drops below the threshold:
-
-```
-CloudWatch Alarm
+</code></pre>
+<p>An email notification is sent.</p>
+<p>After CPU usage drops below the threshold:</p>
+<pre><code>CloudWatch Alarm
 → OK
-```
-
-A second email notification is sent.
-
----
-
-# Validation
-
-The following email notifications were successfully received:
-
-```
-ALARM:
-"lab-ec2-cpu-alarm"
+</code></pre>
+<p>A second email notification is sent.</p>
+<hr />
+<h1 id="validation">Validation</h1>
+<p>The following email notifications were successfully received:</p>
+<pre><code>ALARM:
+&quot;lab-ec2-cpu-alarm&quot;
 
 OK:
-"lab-ec2-cpu-alarm"
-```
-
-This validates the complete monitoring pipeline.
-
----
-
-# Final Architecture
-
-```text
-EC2 Instance
+&quot;lab-ec2-cpu-alarm&quot;
+</code></pre>
+<p>This validates the complete monitoring pipeline.</p>
+<hr />
+<h1 id="final-architecture">Final Architecture</h1>
+<pre><code class="language-text">EC2 Instance
       │
       ▼
 CloudWatch Metrics
@@ -298,144 +282,143 @@ SNS Topic
       │
       ▼
 Email Notification
-```
-
----
-
-# Enterprise Best Practices
-
-Use Standard Topics for monitoring notifications.
-
-Use descriptive and reusable names.
-
-```
-lab-cloudwatch-topic
-```
-
-Separate monitoring from notification delivery.
-
-Reuse the same SNS Topic for multiple CloudWatch alarms whenever appropriate.
-
-Always configure notifications for both:
-
-- ALARM
-- OK
-
-This provides full visibility into incident lifecycle.
-
-Keep subscribers independent from publishers.
-
-CloudWatch should never know who receives notifications.
-
-SNS handles message distribution.
-
----
-
-# Benefits of SNS
-
-SNS enables one publisher to notify multiple consumers simultaneously.
-
-Future integrations can include:
-
-- AWS Lambda
-- Amazon SQS
-- EventBridge
-- AWS Chatbot
-- Slack
-- Microsoft Teams
-- SMS
-- HTTPS APIs
-
-No CloudWatch configuration changes are required when adding new subscribers.
-
----
-
-# AWS Services Used
-
-- Amazon EC2
-- Amazon CloudWatch
-- Amazon SNS
-
----
-
-# Resources Created
-
-| Resource | Name |
-|----------|------|
-| SNS Topic | lab-cloudwatch-topic |
-| Email Subscription | Confirmed |
-
----
-
-# Resources Reused
-
-| Resource | Name |
-|----------|------|
-| EC2 Instance | lab-web-server |
-| CloudWatch Alarm | lab-ec2-cpu-alarm |
-| Launch Template | lab-web-template |
-| ALB | lab-web-alb |
-| Target Group | lab-web-tg |
-
----
-
-# Cost
-
-This lab is Free Tier friendly.
-
-Only lightweight SNS usage was generated.
-
-Email notifications incur negligible cost for learning environments.
-
----
-
-# Cleanup (Optional)
-
-If you no longer need the notifications:
-
-Delete the subscription:
-
-```
-SNS
+</code></pre>
+<hr />
+<h1 id="enterprise-best-practices">Enterprise Best Practices</h1>
+<p>Use Standard Topics for monitoring notifications.</p>
+<p>Use descriptive and reusable names.</p>
+<pre><code>lab-cloudwatch-topic
+</code></pre>
+<p>Separate monitoring from notification delivery.</p>
+<p>Reuse the same SNS Topic for multiple CloudWatch alarms whenever appropriate.</p>
+<p>Always configure notifications for both:</p>
+<ul>
+<li>ALARM</li>
+<li>OK</li>
+</ul>
+<p>This provides full visibility into incident lifecycle.</p>
+<p>Keep subscribers independent from publishers.</p>
+<p>CloudWatch should never know who receives notifications.</p>
+<p>SNS handles message distribution.</p>
+<hr />
+<h1 id="benefits-of-sns">Benefits of SNS</h1>
+<p>SNS enables one publisher to notify multiple consumers simultaneously.</p>
+<p>Future integrations can include:</p>
+<ul>
+<li>AWS Lambda</li>
+<li>Amazon SQS</li>
+<li>EventBridge</li>
+<li>AWS Chatbot</li>
+<li>Slack</li>
+<li>Microsoft Teams</li>
+<li>SMS</li>
+<li>HTTPS APIs</li>
+</ul>
+<p>No CloudWatch configuration changes are required when adding new subscribers.</p>
+<hr />
+<h1 id="aws-services-used">AWS Services Used</h1>
+<ul>
+<li>Amazon EC2</li>
+<li>Amazon CloudWatch</li>
+<li>Amazon SNS</li>
+</ul>
+<hr />
+<h1 id="resources-created">Resources Created</h1>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SNS Topic</td>
+<td>lab-cloudwatch-topic</td>
+</tr>
+<tr>
+<td>Email Subscription</td>
+<td>Confirmed</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="resources-reused">Resources Reused</h1>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EC2 Instance</td>
+<td>lab-web-server</td>
+</tr>
+<tr>
+<td>CloudWatch Alarm</td>
+<td>lab-ec2-cpu-alarm</td>
+</tr>
+<tr>
+<td>Launch Template</td>
+<td>lab-web-template</td>
+</tr>
+<tr>
+<td>ALB</td>
+<td>lab-web-alb</td>
+</tr>
+<tr>
+<td>Target Group</td>
+<td>lab-web-tg</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="cost">Cost</h1>
+<p>This lab is Free Tier friendly.</p>
+<p>Only lightweight SNS usage was generated.</p>
+<p>Email notifications incur negligible cost for learning environments.</p>
+<hr />
+<h1 id="cleanup-optional">Cleanup (Optional)</h1>
+<p>If you no longer need the notifications:</p>
+<p>Delete the subscription:</p>
+<pre><code>SNS
 → Topics
 → lab-cloudwatch-topic
 → Subscriptions
 → Delete
-```
-
-Or delete the topic entirely:
-
-```
-SNS
+</code></pre>
+<p>Or delete the topic entirely:</p>
+<pre><code>SNS
 → Topics
 → lab-cloudwatch-topic
 → Delete
-```
+</code></pre>
+<hr />
+<h1 id="what-we-learned">What We Learned</h1>
+<ul>
+<li>Amazon SNS concepts</li>
+<li>Publish/Subscribe messaging</li>
+<li>SNS Topics</li>
+<li>Email subscriptions</li>
+<li>Subscription confirmation</li>
+<li>CloudWatch integration</li>
+<li>Alarm notifications</li>
+<li>Enterprise monitoring architecture</li>
+<li>Decoupled notification design</li>
+</ul>
+<hr />
+<h1 id="next-lab">Next Lab</h1>
+<p><strong>Lab 16 - AWS Lambda</strong></p>
+<p>Topics:</p>
+<ul>
+<li>Create your first Lambda Function</li>
+<li>Execute code without managing servers</li>
+<li>Understand Serverless Computing</li>
+<li>Integrate Lambda with existing AWS services</li>
+<li>Prepare for event-driven architectures</li>
+</ul>
 
----
-
-# What We Learned
-
-- Amazon SNS concepts
-- Publish/Subscribe messaging
-- SNS Topics
-- Email subscriptions
-- Subscription confirmation
-- CloudWatch integration
-- Alarm notifications
-- Enterprise monitoring architecture
-- Decoupled notification design
-
----
-
-# Next Lab
-
-**Lab 16 - AWS Lambda**
-
-Topics:
-
-- Create your first Lambda Function
-- Execute code without managing servers
-- Understand Serverless Computing
-- Integrate Lambda with existing AWS services
-- Prepare for event-driven architectures
+</body>
+</html>

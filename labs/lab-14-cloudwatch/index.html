@@ -1,61 +1,97 @@
-# Lab 14 – Amazon CloudWatch Monitoring and Alarms
-
-## Objective
-
-In this lab, you will learn how to monitor AWS resources using Amazon CloudWatch.
-
-You will:
-
-- Explore CloudWatch metrics.
-- Understand namespaces and dimensions.
-- Monitor an EC2 instance.
-- Create a CloudWatch Alarm.
-- Generate CPU load.
-- Observe the alarm lifecycle.
-- Explore Application Load Balancer metrics.
-- Understand how CloudWatch integrates with other AWS services.
-
-This lab reuses the infrastructure built in previous labs.
-
----
-
-# Previous Labs
-
-This lab assumes the following resources already exist:
-
-- IAM
-- EC2
-- Security Groups
-- EBS
-- S3
-- Launch Template
-- User Data
-- Apache
-- Git
-- GitHub
-- Target Group
-- Application Load Balancer
-- Route 53 (Conceptual)
-
----
-
-# Existing Resources
-
-| Resource | Name |
-|----------|------|
-| EC2 Instance | lab-web-server |
-| Launch Template | lab-web-template |
-| EC2 Security Group | lab-ec2-web-sg |
-| ALB Security Group | lab-alb-sg |
-| Target Group | lab-web-tg |
-| Application Load Balancer | lab-web-alb |
-
----
-
-# Architecture
-
-```
-                Internet
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 14 - Amazon CloudWatch Monitoring and Alarms</title>
+<style>
+body { font-family: Arial, sans-serif; line-height: 1.6; color: #222; max-width: 1100px; margin: 0 auto; padding: 30px; background-color: #ffffff; }
+h1, h2, h3 { color: #1f2937; }
+h1 { border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+h2 { border-bottom: 1px solid #d1d5db; padding-bottom: 6px; margin-top: 35px; }
+code { background-color: #f3f4f6; padding: 2px 5px; border-radius: 4px; font-family: Consolas, monospace; }
+pre { background-color: #111827; color: #f9fafb; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: Consolas, monospace; font-size: 14px; }
+pre code { background-color: transparent; color: inherit; padding: 0; border-radius: 0; }
+.note { background-color: #eff6ff; border-left: 5px solid #2563eb; padding: 12px 16px; margin: 20px 0; }
+.warning { background-color: #fffbeb; border-left: 5px solid #f59e0b; padding: 12px 16px; margin: 20px 0; }
+.success { background-color: #ecfdf5; border-left: 5px solid #10b981; padding: 12px 16px; margin: 20px 0; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+th { background-color: #f3f4f6; }
+</style></head>
+<body>
+<h1 id="lab-14-amazon-cloudwatch-monitoring-and-alarms">Lab 14 – Amazon CloudWatch Monitoring and Alarms</h1>
+<h2 id="objective">Objective</h2>
+<p>In this lab, you will learn how to monitor AWS resources using Amazon CloudWatch.</p>
+<p>You will:</p>
+<ul>
+<li>Explore CloudWatch metrics.</li>
+<li>Understand namespaces and dimensions.</li>
+<li>Monitor an EC2 instance.</li>
+<li>Create a CloudWatch Alarm.</li>
+<li>Generate CPU load.</li>
+<li>Observe the alarm lifecycle.</li>
+<li>Explore Application Load Balancer metrics.</li>
+<li>Understand how CloudWatch integrates with other AWS services.</li>
+</ul>
+<p>This lab reuses the infrastructure built in previous labs.</p>
+<hr />
+<h1 id="previous-labs">Previous Labs</h1>
+<p>This lab assumes the following resources already exist:</p>
+<ul>
+<li>IAM</li>
+<li>EC2</li>
+<li>Security Groups</li>
+<li>EBS</li>
+<li>S3</li>
+<li>Launch Template</li>
+<li>User Data</li>
+<li>Apache</li>
+<li>Git</li>
+<li>GitHub</li>
+<li>Target Group</li>
+<li>Application Load Balancer</li>
+<li>Route 53 (Conceptual)</li>
+</ul>
+<hr />
+<h1 id="existing-resources">Existing Resources</h1>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EC2 Instance</td>
+<td>lab-web-server</td>
+</tr>
+<tr>
+<td>Launch Template</td>
+<td>lab-web-template</td>
+</tr>
+<tr>
+<td>EC2 Security Group</td>
+<td>lab-ec2-web-sg</td>
+</tr>
+<tr>
+<td>ALB Security Group</td>
+<td>lab-alb-sg</td>
+</tr>
+<tr>
+<td>Target Group</td>
+<td>lab-web-tg</td>
+</tr>
+<tr>
+<td>Application Load Balancer</td>
+<td>lab-web-alb</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="architecture">Architecture</h1>
+<pre><code>                Internet
                     │
                     │
           Application Load Balancer
@@ -71,172 +107,142 @@ This lab assumes the following resources already exist:
                     │
                     ▼
             CloudWatch Alarm
-```
-
----
-
-# Estimated Cost
-
-This lab is Free Tier friendly.
-
-CloudWatch provides EC2 basic monitoring at no additional cost.
-
-A single CloudWatch Alarm has a very small cost (only a few cents per month). Since it is created only for learning purposes and deleted afterwards, the overall cost is negligible.
-
----
-
-# Part 1 – Explore CloudWatch
-
-Open
-
-```
-AWS Console
+</code></pre>
+<hr />
+<h1 id="estimated-cost">Estimated Cost</h1>
+<p>This lab is Free Tier friendly.</p>
+<p>CloudWatch provides EC2 basic monitoring at no additional cost.</p>
+<p>A single CloudWatch Alarm has a very small cost (only a few cents per month). Since it is created only for learning purposes and deleted afterwards, the overall cost is negligible.</p>
+<hr />
+<h1 id="part-1-explore-cloudwatch">Part 1 – Explore CloudWatch</h1>
+<p>Open</p>
+<pre><code>AWS Console
 → CloudWatch
 → Metrics
-```
-
-Click
-
-```
-All metrics
-```
-
-You should see several namespaces such as:
-
-- EC2
-- EBS
-- ApplicationELB
-- S3
-- KMS
-- Usage
-
-These namespaces are automatically created by AWS services.
-
----
-
-# Understanding Namespaces
-
-Each AWS service publishes its own metrics into CloudWatch.
-
-Examples:
-
-| Service | Namespace |
-|----------|-----------|
-| EC2 | AWS/EC2 |
-| EBS | AWS/EBS |
-| ALB | AWS/ApplicationELB |
-| S3 | AWS/S3 |
-
-CloudWatch acts as a centralized metrics repository.
-
----
-
-# Part 2 – Explore EC2 Metrics
-
-Open
-
-```
-CloudWatch
+</code></pre>
+<p>Click</p>
+<pre><code>All metrics
+</code></pre>
+<p>You should see several namespaces such as:</p>
+<ul>
+<li>EC2</li>
+<li>EBS</li>
+<li>ApplicationELB</li>
+<li>S3</li>
+<li>KMS</li>
+<li>Usage</li>
+</ul>
+<p>These namespaces are automatically created by AWS services.</p>
+<hr />
+<h1 id="understanding-namespaces">Understanding Namespaces</h1>
+<p>Each AWS service publishes its own metrics into CloudWatch.</p>
+<p>Examples:</p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Namespace</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EC2</td>
+<td>AWS/EC2</td>
+</tr>
+<tr>
+<td>EBS</td>
+<td>AWS/EBS</td>
+</tr>
+<tr>
+<td>ALB</td>
+<td>AWS/ApplicationELB</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>AWS/S3</td>
+</tr>
+</tbody>
+</table>
+<p>CloudWatch acts as a centralized metrics repository.</p>
+<hr />
+<h1 id="part-2-explore-ec2-metrics">Part 2 – Explore EC2 Metrics</h1>
+<p>Open</p>
+<pre><code>CloudWatch
 → Metrics
 → EC2
 → Per-Instance Metrics
-```
+</code></pre>
+<p>Locate your running EC2 instance.</p>
+<p>Select</p>
+<pre><code>CPUUtilization
+</code></pre>
+<p>A graph displaying CPU utilization should appear.</p>
+<p>At idle, CPU usage is typically below:</p>
+<pre><code>1%
+</code></pre>
+<p>This is expected because only the operating system and Apache are running.</p>
+<hr />
+<h1 id="understanding-cpuutilization">Understanding CPUUtilization</h1>
+<p>CPUUtilization represents the percentage of CPU currently being used.</p>
+<p>Typical values:</p>
+<table>
+<thead>
+<tr>
+<th>CPU</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–10%</td>
+<td>Idle</td>
+</tr>
+<tr>
+<td>20–50%</td>
+<td>Normal workload</td>
+</tr>
+<tr>
+<td>70–80%</td>
+<td>High utilization</td>
+</tr>
+<tr>
+<td>90–100%</td>
+<td>CPU saturation</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="part-3-create-a-cloudwatch-alarm">Part 3 – Create a CloudWatch Alarm</h1>
+<p>With CPUUtilization selected, click</p>
+<pre><code>Create alarm
+</code></pre>
+<p>Configure:</p>
+<p>Threshold type</p>
+<pre><code>Static
+</code></pre>
+<p>Condition</p>
+<pre><code>Greater than
+</code></pre>
+<p>Threshold</p>
+<pre><code>70
+</code></pre>
+<p>Leave the remaining options as default.</p>
+<p>Current configuration:</p>
+<p>Statistic</p>
+<pre><code>Average
+</code></pre>
+<p>Period</p>
+<pre><code>5 Minutes
+</code></pre>
+<p>Datapoints to alarm</p>
+<pre><code>1 out of 1
+</code></pre>
+<hr />
+<h1 id="alarm-logic">Alarm Logic</h1>
+<p>This configuration means:</p>
+<pre><code>Average CPU
 
-Locate your running EC2 instance.
-
-Select
-
-```
-CPUUtilization
-```
-
-A graph displaying CPU utilization should appear.
-
-At idle, CPU usage is typically below:
-
-```
-1%
-```
-
-This is expected because only the operating system and Apache are running.
-
----
-
-# Understanding CPUUtilization
-
-CPUUtilization represents the percentage of CPU currently being used.
-
-Typical values:
-
-| CPU | Meaning |
-|------|----------|
-| 0–10% | Idle |
-| 20–50% | Normal workload |
-| 70–80% | High utilization |
-| 90–100% | CPU saturation |
-
----
-
-# Part 3 – Create a CloudWatch Alarm
-
-With CPUUtilization selected, click
-
-```
-Create alarm
-```
-
-Configure:
-
-Threshold type
-
-```
-Static
-```
-
-Condition
-
-```
-Greater than
-```
-
-Threshold
-
-```
-70
-```
-
-Leave the remaining options as default.
-
-Current configuration:
-
-Statistic
-
-```
-Average
-```
-
-Period
-
-```
-5 Minutes
-```
-
-Datapoints to alarm
-
-```
-1 out of 1
-```
-
----
-
-# Alarm Logic
-
-This configuration means:
-
-```
-Average CPU
-
->
+&gt;
 
 70%
 
@@ -244,159 +250,91 @@ during
 
 1 evaluation period
 (5 minutes)
-```
-
-If true:
-
-```
-Alarm State
+</code></pre>
+<p>If true:</p>
+<pre><code>Alarm State
 
 ↓
 
 ALARM
-```
-
----
-
-# Part 4 – Notification
-
-Click
-
-```
-Next
-```
-
-Do not configure SNS yet.
-
-Remove any notification action.
-
-SNS will be covered in the next lab.
-
----
-
-# Part 5 – Alarm Details
-
-Alarm name
-
-```
-lab-ec2-cpu-alarm
-```
-
-Description
-
-```
-CloudWatch alarm for EC2 CPU utilization above 70%.
-```
-
-Click
-
-```
-Create Alarm
-```
-
----
-
-# Part 6 – Alarm States
-
-A CloudWatch Alarm can be in three states.
-
-## INSUFFICIENT_DATA
-
-CloudWatch does not yet have enough data.
-
-Usually seen:
-
-- Immediately after alarm creation
-- When an instance starts
-- When metrics are unavailable
-
----
-
-## OK
-
-The metric is within the configured threshold.
-
-For this lab:
-
-```
-CPU ≤ 70%
-```
-
----
-
-## ALARM
-
-The threshold has been exceeded.
-
-For this lab:
-
-```
-CPU > 70%
-```
-
----
-
-# Part 7 – Generate CPU Load
-
-Connect to the EC2 instance.
-
-Update packages:
-
-```bash
-sudo dnf update -y
-```
-
-Install stress-ng:
-
-```bash
-sudo dnf install -y stress-ng
-```
-
-Verify installation:
-
-```bash
-stress-ng --version
-```
-
-Check the number of CPUs:
-
-```bash
-nproc
-```
-
-Example output:
-
-```
-2
-```
-
-Generate CPU load:
-
-```bash
-stress-ng --cpu 2 --timeout 600s
-```
-
-This command:
-
-- Uses both virtual CPUs
-- Runs for 10 minutes
-- Generates nearly 100% CPU utilization
-
----
-
-# Part 8 – Observe the Alarm
-
-Open
-
-```
-CloudWatch
+</code></pre>
+<hr />
+<h1 id="part-4-notification">Part 4 – Notification</h1>
+<p>Click</p>
+<pre><code>Next
+</code></pre>
+<p>Do not configure SNS yet.</p>
+<p>Remove any notification action.</p>
+<p>SNS will be covered in the next lab.</p>
+<hr />
+<h1 id="part-5-alarm-details">Part 5 – Alarm Details</h1>
+<p>Alarm name</p>
+<pre><code>lab-ec2-cpu-alarm
+</code></pre>
+<p>Description</p>
+<pre><code>CloudWatch alarm for EC2 CPU utilization above 70%.
+</code></pre>
+<p>Click</p>
+<pre><code>Create Alarm
+</code></pre>
+<hr />
+<h1 id="part-6-alarm-states">Part 6 – Alarm States</h1>
+<p>A CloudWatch Alarm can be in three states.</p>
+<h2 id="insufficient_data">INSUFFICIENT_DATA</h2>
+<p>CloudWatch does not yet have enough data.</p>
+<p>Usually seen:</p>
+<ul>
+<li>Immediately after alarm creation</li>
+<li>When an instance starts</li>
+<li>When metrics are unavailable</li>
+</ul>
+<hr />
+<h2 id="ok">OK</h2>
+<p>The metric is within the configured threshold.</p>
+<p>For this lab:</p>
+<pre><code>CPU ≤ 70%
+</code></pre>
+<hr />
+<h2 id="alarm">ALARM</h2>
+<p>The threshold has been exceeded.</p>
+<p>For this lab:</p>
+<pre><code>CPU &gt; 70%
+</code></pre>
+<hr />
+<h1 id="part-7-generate-cpu-load">Part 7 – Generate CPU Load</h1>
+<p>Connect to the EC2 instance.</p>
+<p>Update packages:</p>
+<pre><code class="language-bash">sudo dnf update -y
+</code></pre>
+<p>Install stress-ng:</p>
+<pre><code class="language-bash">sudo dnf install -y stress-ng
+</code></pre>
+<p>Verify installation:</p>
+<pre><code class="language-bash">stress-ng --version
+</code></pre>
+<p>Check the number of CPUs:</p>
+<pre><code class="language-bash">nproc
+</code></pre>
+<p>Example output:</p>
+<pre><code>2
+</code></pre>
+<p>Generate CPU load:</p>
+<pre><code class="language-bash">stress-ng --cpu 2 --timeout 600s
+</code></pre>
+<p>This command:</p>
+<ul>
+<li>Uses both virtual CPUs</li>
+<li>Runs for 10 minutes</li>
+<li>Generates nearly 100% CPU utilization</li>
+</ul>
+<hr />
+<h1 id="part-8-observe-the-alarm">Part 8 – Observe the Alarm</h1>
+<p>Open</p>
+<pre><code>CloudWatch
 → Alarms
-```
-
-Watch the alarm transition:
-
-```
-INSUFFICIENT_DATA
+</code></pre>
+<p>Watch the alarm transition:</p>
+<pre><code>INSUFFICIENT_DATA
 
 ↓
 
@@ -405,229 +343,159 @@ OK
 ↓
 
 ALARM
-```
-
-When stress-ng finishes (or is stopped):
-
-```
-ALARM
+</code></pre>
+<p>When stress-ng finishes (or is stopped):</p>
+<pre><code>ALARM
 
 ↓
 
 OK
-```
-
-This confirms the alarm is working correctly.
-
----
-
-# Part 9 – Explore Application Load Balancer Metrics
-
-Open
-
-```
-CloudWatch
+</code></pre>
+<p>This confirms the alarm is working correctly.</p>
+<hr />
+<h1 id="part-9-explore-application-load-balancer-metrics">Part 9 – Explore Application Load Balancer Metrics</h1>
+<p>Open</p>
+<pre><code>CloudWatch
 → Metrics
 → ApplicationELB
 → Per AppELB Metrics
-```
-
-Useful metrics include:
-
-- RequestCount
-- TargetResponseTime
-- HTTPCode_Target_2XX_Count
-- HTTPCode_Target_3XX_Count
-- HTTPCode_Target_4XX_Count
-- HTTPCode_Target_5XX_Count
-- ActiveConnectionCount
-- NewConnectionCount
-- ProcessedBytes
-
----
-
-# Most Important ALB Metrics
-
-## RequestCount
-
-Number of HTTP requests received.
-
-Useful for:
-
-- Capacity planning
-- Traffic analysis
-
----
-
-## TargetResponseTime
-
-Time required for the backend target to respond.
-
-Useful for:
-
-- Detecting slow applications
-- Performance monitoring
-
----
-
-## HTTPCode_Target_2XX_Count
-
-Successful responses.
-
-Indicates normal application behavior.
-
----
-
-## HTTPCode_Target_4XX_Count
-
-Client errors.
-
-Examples:
-
-- 400
-- 401
-- 403
-- 404
-
-Useful for identifying invalid requests or authentication problems.
-
----
-
-## HTTPCode_Target_5XX_Count
-
-Server-side errors.
-
-Examples:
-
-- 500
-- 502
-- 503
-- 504
-
-One of the most important production monitoring metrics because it indicates application failures.
-
----
-
-## ActiveConnectionCount
-
-Current open client connections.
-
-Useful for understanding live traffic.
-
----
-
-## NewConnectionCount
-
-Number of newly established client connections.
-
-Useful for traffic trend analysis.
-
----
-
-## ProcessedBytes
-
-Amount of data processed by the Load Balancer.
-
-Useful for bandwidth monitoring.
-
----
-
-# CloudWatch Dashboards
-
-CloudWatch Dashboards provide a single monitoring interface.
-
-Example:
-
-```
-+-------------------------------------------------------+
+</code></pre>
+<p>Useful metrics include:</p>
+<ul>
+<li>RequestCount</li>
+<li>TargetResponseTime</li>
+<li>HTTPCode_Target_2XX_Count</li>
+<li>HTTPCode_Target_3XX_Count</li>
+<li>HTTPCode_Target_4XX_Count</li>
+<li>HTTPCode_Target_5XX_Count</li>
+<li>ActiveConnectionCount</li>
+<li>NewConnectionCount</li>
+<li>ProcessedBytes</li>
+</ul>
+<hr />
+<h1 id="most-important-alb-metrics">Most Important ALB Metrics</h1>
+<h2 id="requestcount">RequestCount</h2>
+<p>Number of HTTP requests received.</p>
+<p>Useful for:</p>
+<ul>
+<li>Capacity planning</li>
+<li>Traffic analysis</li>
+</ul>
+<hr />
+<h2 id="targetresponsetime">TargetResponseTime</h2>
+<p>Time required for the backend target to respond.</p>
+<p>Useful for:</p>
+<ul>
+<li>Detecting slow applications</li>
+<li>Performance monitoring</li>
+</ul>
+<hr />
+<h2 id="httpcode_target_2xx_count">HTTPCode_Target_2XX_Count</h2>
+<p>Successful responses.</p>
+<p>Indicates normal application behavior.</p>
+<hr />
+<h2 id="httpcode_target_4xx_count">HTTPCode_Target_4XX_Count</h2>
+<p>Client errors.</p>
+<p>Examples:</p>
+<ul>
+<li>400</li>
+<li>401</li>
+<li>403</li>
+<li>404</li>
+</ul>
+<p>Useful for identifying invalid requests or authentication problems.</p>
+<hr />
+<h2 id="httpcode_target_5xx_count">HTTPCode_Target_5XX_Count</h2>
+<p>Server-side errors.</p>
+<p>Examples:</p>
+<ul>
+<li>500</li>
+<li>502</li>
+<li>503</li>
+<li>504</li>
+</ul>
+<p>One of the most important production monitoring metrics because it indicates application failures.</p>
+<hr />
+<h2 id="activeconnectioncount">ActiveConnectionCount</h2>
+<p>Current open client connections.</p>
+<p>Useful for understanding live traffic.</p>
+<hr />
+<h2 id="newconnectioncount">NewConnectionCount</h2>
+<p>Number of newly established client connections.</p>
+<p>Useful for traffic trend analysis.</p>
+<hr />
+<h2 id="processedbytes">ProcessedBytes</h2>
+<p>Amount of data processed by the Load Balancer.</p>
+<p>Useful for bandwidth monitoring.</p>
+<hr />
+<h1 id="cloudwatch-dashboards">CloudWatch Dashboards</h1>
+<p>CloudWatch Dashboards provide a single monitoring interface.</p>
+<p>Example:</p>
+<pre><code>+-------------------------------------------------------+
 | Requests/min      CPU EC2       Response Time          |
 +-------------------------------------------------------+
 | ALB 5XX Errors    Healthy Hosts  Network In            |
 +-------------------------------------------------------+
 | Auto Scaling      Disk Usage     Lambda Errors         |
 +-------------------------------------------------------+
-```
-
-Dashboards allow operations teams to monitor an entire environment from one screen.
-
----
-
-# CloudWatch Integration
-
-CloudWatch does not perform actions itself.
-
-It evaluates metrics and changes alarm states.
-
-Other AWS services react to these state changes.
-
-Typical integrations include:
-
-```
-CloudWatch Alarm
+</code></pre>
+<p>Dashboards allow operations teams to monitor an entire environment from one screen.</p>
+<hr />
+<h1 id="cloudwatch-integration">CloudWatch Integration</h1>
+<p>CloudWatch does not perform actions itself.</p>
+<p>It evaluates metrics and changes alarm states.</p>
+<p>Other AWS services react to these state changes.</p>
+<p>Typical integrations include:</p>
+<pre><code>CloudWatch Alarm
         │
         ├── Amazon SNS
         ├── Auto Scaling
         ├── AWS Lambda
         ├── Systems Manager
         └── EventBridge
-```
-
-This makes CloudWatch the foundation of monitoring and automation within AWS.
-
----
-
-# Key Concepts Learned
-
-- Amazon CloudWatch
-- Metrics
-- Namespaces
-- Dimensions
-- EC2 Monitoring
-- CPUUtilization
-- CloudWatch Alarms
-- Static Thresholds
-- Alarm States
-- Application Load Balancer Metrics
-- Observability
-- Monitoring Best Practices
-
----
-
-# Clean Up (Optional)
-
-To avoid unnecessary charges, delete the CloudWatch Alarm when finished.
-
-Open
-
-```
-CloudWatch
+</code></pre>
+<p>This makes CloudWatch the foundation of monitoring and automation within AWS.</p>
+<hr />
+<h1 id="key-concepts-learned">Key Concepts Learned</h1>
+<ul>
+<li>Amazon CloudWatch</li>
+<li>Metrics</li>
+<li>Namespaces</li>
+<li>Dimensions</li>
+<li>EC2 Monitoring</li>
+<li>CPUUtilization</li>
+<li>CloudWatch Alarms</li>
+<li>Static Thresholds</li>
+<li>Alarm States</li>
+<li>Application Load Balancer Metrics</li>
+<li>Observability</li>
+<li>Monitoring Best Practices</li>
+</ul>
+<hr />
+<h1 id="clean-up-optional">Clean Up (Optional)</h1>
+<p>To avoid unnecessary charges, delete the CloudWatch Alarm when finished.</p>
+<p>Open</p>
+<pre><code>CloudWatch
 → Alarms
-```
+</code></pre>
+<p>Select</p>
+<pre><code>lab-ec2-cpu-alarm
+</code></pre>
+<p>Click</p>
+<pre><code>Delete
+</code></pre>
+<hr />
+<h1 id="what-comes-next">What Comes Next</h1>
+<p>The next lab introduces:</p>
+<p><strong>Lab 15 – Amazon SNS</strong></p>
+<p>Topics covered:</p>
+<ul>
+<li>SNS Topics</li>
+<li>Email Notifications</li>
+<li>CloudWatch Alarm Integration</li>
+<li>Real-time Alerting</li>
+<li>Monitoring Best Practices</li>
+</ul>
 
-Select
-
-```
-lab-ec2-cpu-alarm
-```
-
-Click
-
-```
-Delete
-```
-
----
-
-# What Comes Next
-
-The next lab introduces:
-
-**Lab 15 – Amazon SNS**
-
-Topics covered:
-
-- SNS Topics
-- Email Notifications
-- CloudWatch Alarm Integration
-- Real-time Alerting
-- Monitoring Best Practices
+</body>
+</html>

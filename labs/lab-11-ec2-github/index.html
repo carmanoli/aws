@@ -1,31 +1,37 @@
-# Lab – EC2 + GitHub using a Launch Template
-
-## Objective
-
-In this lab, you will learn how to deploy a static website automatically on an Amazon EC2 instance using a Launch Template and EC2 User Data.
-
-When a new instance is launched, it will automatically:
-
-- Install Apache HTTP Server
-- Install Git
-- Clone a public GitHub repository
-- Publish the website to `/var/www/html`
-- Start the web server
-- Make the website available over HTTP
-
-This Launch Template will be reused in the following labs:
-
-- Lab 12 – Application Load Balancer (ALB)
-- Lab 13 – Auto Scaling Group
-- Lab 14 – GitHub Actions
-- Lab 15 – Jenkins CI/CD
-
----
-
-# Architecture
-
-```
-                GitHub Repository
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Lab 11 - EC2 + GitHub using a Launch Template</title><style>
+body { font-family: Arial, sans-serif; line-height: 1.6; color: #222; max-width: 1100px; margin: 0 auto; padding: 30px; background-color: #ffffff; }
+h1, h2, h3 { color: #1f2937; }
+h1 { border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+h2 { border-bottom: 1px solid #d1d5db; padding-bottom: 6px; margin-top: 35px; }
+code { background-color: #f3f4f6; padding: 2px 5px; border-radius: 4px; font-family: Consolas, monospace; }
+pre { background-color: #111827; color: #f9fafb; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: Consolas, monospace; font-size: 14px; }
+pre code { background-color: transparent; color: inherit; padding: 0; border-radius: 0; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+th { background-color: #f3f4f6; }
+</style></head><body><h1 id="lab-ec2-github-using-a-launch-template">Lab – EC2 + GitHub using a Launch Template</h1>
+<h2 id="objective">Objective</h2>
+<p>In this lab, you will learn how to deploy a static website automatically on an Amazon EC2 instance using a Launch Template and EC2 User Data.</p>
+<p>When a new instance is launched, it will automatically:</p>
+<ul>
+<li>Install Apache HTTP Server</li>
+<li>Install Git</li>
+<li>Clone a public GitHub repository</li>
+<li>Publish the website to <code>/var/www/html</code></li>
+<li>Start the web server</li>
+<li>Make the website available over HTTP</li>
+</ul>
+<p>This Launch Template will be reused in the following labs:</p>
+<ul>
+<li>Lab 12 – Application Load Balancer (ALB)</li>
+<li>Lab 13 – Auto Scaling Group</li>
+<li>Lab 14 – GitHub Actions</li>
+<li>Lab 15 – Jenkins CI/CD</li>
+</ul>
+<hr />
+<h1 id="architecture">Architecture</h1>
+<pre><code>                GitHub Repository
                        │
                        ▼
                EC2 Launch Template
@@ -48,175 +54,173 @@ Install Apache                     Install Git
                     │
                     ▼
                  Web Browser
-```
-
----
-
-# Prerequisites
-
-- AWS Account
-- Default VPC
-- Public GitHub repository
-
-Repository used in this lab:
-
-```
-https://github.com/carmanoli/aws
-```
-
-Repository structure:
-
-```
-index.html
+</code></pre>
+<hr />
+<h1 id="prerequisites">Prerequisites</h1>
+<ul>
+<li>AWS Account</li>
+<li>Default VPC</li>
+<li>Public GitHub repository</li>
+</ul>
+<p>Repository used in this lab:</p>
+<pre><code>https://github.com/carmanoli/aws
+</code></pre>
+<p>Repository structure:</p>
+<pre><code>index.html
 assets/
 concepts/
 labs/
-```
-
----
-
-# Step 1 – Create a Security Group
-
-Navigate to:
-
-```
-EC2
+</code></pre>
+<hr />
+<h1 id="step-1-create-a-security-group">Step 1 – Create a Security Group</h1>
+<p>Navigate to:</p>
+<pre><code>EC2
 → Security Groups
 → Create Security Group
-```
-
-Configuration
-
-| Setting | Value |
-|----------|-------|
-| Name | lab-ec2-web-sg |
-| Description | Security Group for EC2 web servers |
-
-Inbound Rules
-
-| Type | Port | Source |
-|------|------|--------|
-| HTTP | 80 | My IP |
-| SSH | 22 | My IP (optional) |
-
-Outbound Rules
-
-| Type | Destination |
-|------|-------------|
-| All Traffic | 0.0.0.0/0 |
-
-Important
-
-Outbound Internet access is required because the instance must download packages and clone the GitHub repository during startup.
-
----
-
-# Step 2 – Create the Launch Template
-
-Navigate to
-
-```
-EC2
+</code></pre>
+<p>Configuration</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>lab-ec2-web-sg</td>
+</tr>
+<tr>
+<td>Description</td>
+<td>Security Group for EC2 web servers</td>
+</tr>
+</tbody>
+</table>
+<p>Inbound Rules</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Port</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP</td>
+<td>80</td>
+<td>My IP</td>
+</tr>
+<tr>
+<td>SSH</td>
+<td>22</td>
+<td>My IP (optional)</td>
+</tr>
+</tbody>
+</table>
+<p>Outbound Rules</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Destination</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All Traffic</td>
+<td>0.0.0.0/0</td>
+</tr>
+</tbody>
+</table>
+<p>Important</p>
+<p>Outbound Internet access is required because the instance must download packages and clone the GitHub repository during startup.</p>
+<hr />
+<h1 id="step-2-create-the-launch-template">Step 2 – Create the Launch Template</h1>
+<p>Navigate to</p>
+<pre><code>EC2
 → Launch Templates
 → Create Launch Template
-```
-
-General Settings
-
-| Setting | Value |
-|----------|-------|
-| Name | lab-web-template |
-| Version Description | Initial Version |
-
-Enable
-
-```
-Provide guidance to help me set up a template that I can use with EC2 Auto Scaling
-```
-
----
-
-# Step 3 – Amazon Machine Image
-
-Select
-
-```
-Amazon Linux 2023
+</code></pre>
+<p>General Settings</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>lab-web-template</td>
+</tr>
+<tr>
+<td>Version Description</td>
+<td>Initial Version</td>
+</tr>
+</tbody>
+</table>
+<p>Enable</p>
+<pre><code>Provide guidance to help me set up a template that I can use with EC2 Auto Scaling
+</code></pre>
+<hr />
+<h1 id="step-3-amazon-machine-image">Step 3 – Amazon Machine Image</h1>
+<p>Select</p>
+<pre><code>Amazon Linux 2023
 64-bit (x86)
-```
-
----
-
-# Step 4 – Instance Type
-
-Choose
-
-```
-t3.micro
-```
-
-If unavailable, use
-
-```
-t2.micro
-```
-
----
-
-# Step 5 – Key Pair
-
-Select your existing EC2 Key Pair.
-
----
-
-# Step 6 – IAM Instance Profile
-
-Leave empty.
-
-Since the GitHub repository is public, no AWS permissions are required.
-
----
-
-# Step 7 – Network Settings
-
-Security Group
-
-```
-lab-ec2-web-sg
-```
-
-Subnet
-
-```
-No Preference
-```
-
-The subnet will be selected when launching the instance.
-
----
-
-# Step 8 – Storage
-
-Default settings
-
-| Volume | Type | Size |
-|---------|------|------|
-| Root | gp3 | 8 GiB |
-
-Keep
-
-```
-Delete on termination = Enabled
-```
-
----
-
-# Step 9 – EC2 User Data
-
-Paste the following script into the User Data section.
-
-```bash
-#!/bin/bash
+</code></pre>
+<hr />
+<h1 id="step-4-instance-type">Step 4 – Instance Type</h1>
+<p>Choose</p>
+<pre><code>t3.micro
+</code></pre>
+<p>If unavailable, use</p>
+<pre><code>t2.micro
+</code></pre>
+<hr />
+<h1 id="step-5-key-pair">Step 5 – Key Pair</h1>
+<p>Select your existing EC2 Key Pair.</p>
+<hr />
+<h1 id="step-6-iam-instance-profile">Step 6 – IAM Instance Profile</h1>
+<p>Leave empty.</p>
+<p>Since the GitHub repository is public, no AWS permissions are required.</p>
+<hr />
+<h1 id="step-7-network-settings">Step 7 – Network Settings</h1>
+<p>Security Group</p>
+<pre><code>lab-ec2-web-sg
+</code></pre>
+<p>Subnet</p>
+<pre><code>No Preference
+</code></pre>
+<p>The subnet will be selected when launching the instance.</p>
+<hr />
+<h1 id="step-8-storage">Step 8 – Storage</h1>
+<p>Default settings</p>
+<table>
+<thead>
+<tr>
+<th>Volume</th>
+<th>Type</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Root</td>
+<td>gp3</td>
+<td>8 GiB</td>
+</tr>
+</tbody>
+</table>
+<p>Keep</p>
+<pre><code>Delete on termination = Enabled
+</code></pre>
+<hr />
+<h1 id="step-9-ec2-user-data">Step 9 – EC2 User Data</h1>
+<p>Paste the following script into the User Data section.</p>
+<pre><code class="language-bash">#!/bin/bash
 
 # Update the operating system
 dnf update -y
@@ -241,175 +245,127 @@ cp -r /tmp/aws/* /var/www/html/
 # Configure permissions
 chown -R apache:apache /var/www/html
 chmod -R 755 /var/www/html
-```
-
-Create the Launch Template.
-
----
-
-# Step 10 – Launch an Instance
-
-Navigate to
-
-```
-EC2
+</code></pre>
+<p>Create the Launch Template.</p>
+<hr />
+<h1 id="step-10-launch-an-instance">Step 10 – Launch an Instance</h1>
+<p>Navigate to</p>
+<pre><code>EC2
 → Launch Templates
-```
-
-Select
-
-```
-lab-web-template
-```
-
-Choose
-
-```
-Actions
+</code></pre>
+<p>Select</p>
+<pre><code>lab-web-template
+</code></pre>
+<p>Choose</p>
+<pre><code>Actions
 → Launch instance from template
-```
-
-Instance name
-
-```
-lab-web-server
-```
-
-Select a public subnet.
-
-Ensure
-
-```
-Auto-assign Public IP = Enabled
-```
-
-Launch the instance.
-
----
-
-# Step 11 – Verify Deployment
-
-Wait until
-
-```
-Instance State
+</code></pre>
+<p>Instance name</p>
+<pre><code>lab-web-server
+</code></pre>
+<p>Select a public subnet.</p>
+<p>Ensure</p>
+<pre><code>Auto-assign Public IP = Enabled
+</code></pre>
+<p>Launch the instance.</p>
+<hr />
+<h1 id="step-11-verify-deployment">Step 11 – Verify Deployment</h1>
+<p>Wait until</p>
+<pre><code>Instance State
 Running
-```
-
-and
-
-```
-Status Checks
+</code></pre>
+<p>and</p>
+<pre><code>Status Checks
 2/2 Passed
-```
-
-Open a browser
-
-```
-http://<EC2-Public-IP>
-```
-
-The website hosted in the GitHub repository should be displayed.
-
----
-
-# Troubleshooting
-
-## Website does not load
-
-Verify
-
-- EC2 instance is running
-- Security Group allows HTTP
-- Instance has a Public IP
-- Apache service is running
-
-```
-sudo systemctl status httpd
-```
-
----
-
-## User Data did not execute correctly
-
-Check cloud-init logs
-
-```
-sudo tail -100 /var/log/cloud-init-output.log
-```
-
----
-
-## Cannot install packages
-
-If you see errors similar to
-
-```
-Curl error (28)
+</code></pre>
+<p>Open a browser</p>
+<pre><code>http://&lt;EC2-Public-IP&gt;
+</code></pre>
+<p>The website hosted in the GitHub repository should be displayed.</p>
+<hr />
+<h1 id="troubleshooting">Troubleshooting</h1>
+<h2 id="website-does-not-load">Website does not load</h2>
+<p>Verify</p>
+<ul>
+<li>EC2 instance is running</li>
+<li>Security Group allows HTTP</li>
+<li>Instance has a Public IP</li>
+<li>Apache service is running</li>
+</ul>
+<pre><code>sudo systemctl status httpd
+</code></pre>
+<hr />
+<h2 id="user-data-did-not-execute-correctly">User Data did not execute correctly</h2>
+<p>Check cloud-init logs</p>
+<pre><code>sudo tail -100 /var/log/cloud-init-output.log
+</code></pre>
+<hr />
+<h2 id="cannot-install-packages">Cannot install packages</h2>
+<p>If you see errors similar to</p>
+<pre><code>Curl error (28)
 Timeout was reached
-```
-
-verify the Security Group outbound rules.
-
-Required outbound rule
-
-| Type | Destination |
-|------|-------------|
-| All Traffic | 0.0.0.0/0 |
-
-Without outbound Internet access, the instance cannot:
-
-- Install Apache
-- Install Git
-- Clone the GitHub repository
-
----
-
-## User Data only runs once
-
-User Data executes only during the first boot.
-
-If the initial execution fails, the recommended solution is:
-
-1. Fix the problem.
-2. Terminate the EC2 instance.
-3. Launch a new instance using the same Launch Template.
-
-This approach follows Infrastructure as Code principles and avoids manual server configuration.
-
----
-
-# Professional Best Practices
-
-- Use Launch Templates instead of manually creating EC2 instances.
-- Automate server configuration using User Data.
-- Keep infrastructure reproducible.
-- Store application source code in GitHub.
-- Recreate infrastructure instead of manually fixing servers.
-- Reuse the same Launch Template across multiple environments.
-- Restrict inbound traffic whenever possible.
-- Always allow outbound Internet access if packages or repositories must be downloaded during instance initialization.
-
----
-
-# Skills Learned
-
-- Amazon EC2
-- Launch Templates
-- EC2 User Data
-- Apache HTTP Server
-- Git
-- GitHub
-- Security Groups
-- Public Subnets
-- Infrastructure Automation
-- Cloud-init troubleshooting
-- AWS networking fundamentals
-
----
-
-# Next Lab
-
-Lab 12 – Application Load Balancer (ALB)
-
-The Launch Template created in this lab will be reused to deploy multiple EC2 instances behind an Application Load Balancer.
+</code></pre>
+<p>verify the Security Group outbound rules.</p>
+<p>Required outbound rule</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Destination</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All Traffic</td>
+<td>0.0.0.0/0</td>
+</tr>
+</tbody>
+</table>
+<p>Without outbound Internet access, the instance cannot:</p>
+<ul>
+<li>Install Apache</li>
+<li>Install Git</li>
+<li>Clone the GitHub repository</li>
+</ul>
+<hr />
+<h2 id="user-data-only-runs-once">User Data only runs once</h2>
+<p>User Data executes only during the first boot.</p>
+<p>If the initial execution fails, the recommended solution is:</p>
+<ol>
+<li>Fix the problem.</li>
+<li>Terminate the EC2 instance.</li>
+<li>Launch a new instance using the same Launch Template.</li>
+</ol>
+<p>This approach follows Infrastructure as Code principles and avoids manual server configuration.</p>
+<hr />
+<h1 id="professional-best-practices">Professional Best Practices</h1>
+<ul>
+<li>Use Launch Templates instead of manually creating EC2 instances.</li>
+<li>Automate server configuration using User Data.</li>
+<li>Keep infrastructure reproducible.</li>
+<li>Store application source code in GitHub.</li>
+<li>Recreate infrastructure instead of manually fixing servers.</li>
+<li>Reuse the same Launch Template across multiple environments.</li>
+<li>Restrict inbound traffic whenever possible.</li>
+<li>Always allow outbound Internet access if packages or repositories must be downloaded during instance initialization.</li>
+</ul>
+<hr />
+<h1 id="skills-learned">Skills Learned</h1>
+<ul>
+<li>Amazon EC2</li>
+<li>Launch Templates</li>
+<li>EC2 User Data</li>
+<li>Apache HTTP Server</li>
+<li>Git</li>
+<li>GitHub</li>
+<li>Security Groups</li>
+<li>Public Subnets</li>
+<li>Infrastructure Automation</li>
+<li>Cloud-init troubleshooting</li>
+<li>AWS networking fundamentals</li>
+</ul>
+<hr />
+<h1 id="next-lab">Next Lab</h1>
+<p>Lab 12 – Application Load Balancer (ALB)</p>
+<p>The Launch Template created in this lab will be reused to deploy multiple EC2 instances behind an Application Load Balancer.</p>
+</body></html>

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 17 - Amazon SNS + AWS Lambda</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #222;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 30px;
+      background-color: #ffffff;
+    }
+    h1, h2, h3 {
+      color: #1f2937;
+    }
+    h1 {
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 10px;
+    }
+    h2 {
+      border-bottom: 1px solid #d1d5db;
+      padding-bottom: 6px;
+      margin-top: 35px;
+    }
+    code {
+      background-color: #f3f4f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    pre {
+      background-color: #111827;
+      color: #f9fafb;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+    }
+    .note {
+      background-color: #eff6ff;
+      border-left: 5px solid #2563eb;
+      padding: 12px 16px;
+      margin: 20px 0;
+    }
+    .warning {
+      background-color: #fffbeb;
+      border-left: 5px solid #f59e0b;
+      padding: 12px 16px;
+      margin: 20px 0;
+    }
+    .success {
+      background-color: #ecfdf5;
+      border-left: 5px solid #10b981;
+      padding: 12px 16px;
+      margin: 20px 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #f3f4f6;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Lab 17 - Amazon SNS + AWS Lambda</h1>
+
+<h2>1. Lab Objective</h2>
+<p>
+The objective of this lab is to integrate an existing Amazon SNS topic with an existing AWS Lambda function.
+This lab demonstrates how SNS can be used as an event distribution service and how Lambda can process messages published to an SNS topic.
+</p>
+
+<p>By the end of this lab, the architecture will support the following flow:</p>
+
+<pre>Manual message publication
+        |
+        v
+Amazon SNS Topic
+        |
+        v
+AWS Lambda Function
+        |
+        v
+Amazon CloudWatch Logs</pre>
+
+<h2>2. Concepts Covered</h2>
+<ul>
+  <li>Amazon SNS topic reuse</li>
+  <li>Lambda triggers</li>
+  <li>SNS-to-Lambda event delivery</li>
+  <li>SNS event structure inside Lambda</li>
+  <li>CloudWatch Logs validation</li>
+  <li>Event-driven architecture fundamentals</li>
+</ul>
+
+<h2>3. Existing Infrastructure</h2>
+<p>This lab reuses infrastructure created in previous labs.</p>
+
+<table>
+  <tr>
+    <th>Resource Type</th>
+    <th>Resource Name</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>SNS Topic</td>
+    <td><code>lab-cloudwatch-topic</code></td>
+    <td>Existing topic created in Lab 15 for CloudWatch alarm notifications.</td>
+  </tr>
+  <tr>
+    <td>Lambda Function</td>
+    <td><code>lab-hello-lambda</code></td>
+    <td>Existing Lambda function created in Lab 16.</td>
+  </tr>
+  <tr>
+    <td>CloudWatch Logs</td>
+    <td><code>/aws/lambda/lab-hello-lambda</code></td>
+    <td>Stores Lambda execution logs.</td>
+  </tr>
+</table>
+
+<div class="note">
+  <strong>Professional practice:</strong> In real environments, it is common to reuse an existing SNS topic when multiple consumers need to receive the same notification or event.
+</div>
+
+<h2>4. Region Used</h2>
+<p>This lab was performed in the following AWS Region:</p>
+
+<pre>Europe (Stockholm) - eu-north-1</pre>
+
+<h2>5. Step 1 - Confirm the Existing Lambda Function</h2>
+<p>Open the AWS Management Console and navigate to:</p>
+
+<pre>Lambda > Functions</pre>
+
+<p>Confirm that the following function exists:</p>
+
+<pre>lab-hello-lambda</pre>
+
+<p>Open the function and verify that it is available in the correct AWS Region.</p>
+
+<h2>6. Step 2 - Update the Lambda Function Code</h2>
+<p>Inside the Lambda function, navigate to:</p>
+
+<pre>Code > Code source</pre>
+
+<p>Replace the existing code with the following Python code:</p>
+
+<pre>import json
+
+def lambda_handler(event, context):
+    print("Full event received:")
+    print(json.dumps(event, indent=2))
+
+    for record in event.get("Records", []):
+        sns_message = record.get("Sns", {}).get("Message", "No message found")
+        sns_subject = record.get("Sns", {}).get("Subject", "No subject")
+
+        print("SNS subject:", sns_subject)
+        print("SNS message:", sns_message)
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps("SNS message processed successfully")
+    }</pre>
+
+<p>Click:</p>
+
+<pre>Deploy</pre>
+
+<h3>Technical Explanation</h3>
+<p>
+When Amazon SNS invokes a Lambda function, the message is delivered inside the <code>event</code> object.
+The event contains a <code>Records</code> array because AWS event sources often support batch-style delivery.
+Each SNS notification appears as one record inside this array.
+</p>
+
+<p>The relevant path for the SNS message is:</p>
+
+<pre>event["Records"][0]["Sns"]["Message"]</pre>
+
+<p>The relevant path for the SNS subject is:</p>
+
+<pre>event["Records"][0]["Sns"]["Subject"]</pre>
+
+<h2>7. Step 3 - Add SNS as a Lambda Trigger</h2>
+<p>Inside the Lambda function, go to:</p>
+
+<pre>Function overview</pre>
+
+<p>Click:</p>
+
+<pre>Add trigger</pre>
+
+<p>Configure the trigger as follows:</p>
+
+<table>
+  <tr>
+    <th>Setting</th>
+    <th>Value</th>
+  </tr>
+  <tr>
+    <td>Source</td>
+    <td><code>SNS</code></td>
+  </tr>
+  <tr>
+    <td>SNS topic</td>
+    <td><code>lab-cloudwatch-topic</code></td>
+  </tr>
+  <tr>
+    <td>Enable trigger</td>
+    <td>Selected</td>
+  </tr>
+</table>
+
+<p>Click:</p>
+
+<pre>Add</pre>
+
+<h3>Technical Explanation</h3>
+<p>
+When the SNS trigger is added to the Lambda function, AWS creates a subscription between the SNS topic and the Lambda function.
+AWS also configures the necessary resource-based permission that allows SNS to invoke the Lambda function.
+</p>
+
+<p>This creates the following relationship:</p>
+
+<pre>Amazon SNS Topic: lab-cloudwatch-topic
+        |
+        v
+AWS Lambda Function: lab-hello-lambda</pre>
+
+<h2>8. Step 4 - Publish a Manual Message to SNS</h2>
+<p>Navigate to:</p>
+
+<pre>Amazon SNS > Topics</pre>
+
+<p>Open the topic:</p>
+
+<pre>lab-cloudwatch-topic</pre>
+
+<p>Click:</p>
+
+<pre>Publish message</pre>
+
+<p>Use the following values:</p>
+
+<table>
+  <tr>
+    <th>Field</th>
+    <th>Value</th>
+  </tr>
+  <tr>
+    <td>Subject</td>
+    <td><code>Lab 17 SNS Lambda Test</code></td>
+  </tr>
+  <tr>
+    <td>Message body</td>
+    <td><code>This message was published manually to SNS and processed by AWS Lambda.</code></td>
+  </tr>
+  <tr>
+    <td>Message attributes</td>
+    <td>Leave empty</td>
+  </tr>
+</table>
+
+<p>Click:</p>
+
+<pre>Publish message</pre>
+
+<h3>Technical Explanation</h3>
+<p>
+Amazon SNS uses a publish-subscribe model. A publisher sends a message to a topic, and SNS delivers that message to all active subscribers.
+In this lab, the topic can deliver the same message to multiple destinations, such as an email subscription and a Lambda function.
+</p>
+
+<h2>9. Step 5 - Validate the Lambda Execution in CloudWatch Logs</h2>
+<p>Navigate to:</p>
+
+<pre>Lambda > Functions > lab-hello-lambda > Monitor > Logs > View CloudWatch Logs</pre>
+
+<p>Open the most recent log stream.</p>
+
+<p>The log stream should include entries similar to the following:</p>
+
+<pre>START RequestId: ...
+Full event received:
+{
+  "Records": [
+    {
+      "EventSource": "aws:sns",
+      "EventVersion": "1.0",
+      "Sns": {
+        "Type": "Notification",
+        "MessageId": "...",
+        "TopicArn": "arn:aws:sns:eu-north-1:ACCOUNT_ID:lab-cloudwatch-topic",
+        "Message": "This message was published manually to SNS and processed by AWS Lambda.",
+        "Subject": "Lab 17 SNS Lambda Test",
+        "MessageAttributes": {}
+      }
+    }
+  ]
+}
+SNS subject: Lab 17 SNS Lambda Test
+SNS message: This message was published manually to SNS and processed by AWS Lambda.
+END RequestId: ...
+REPORT RequestId: ...</pre>
+
+<div class="success">
+  <strong>Validation result:</strong> The Lambda function was successfully invoked by Amazon SNS, processed the message, and wrote the output to CloudWatch Logs.
+</div>
+
+<h2>10. Understanding the SNS Event Structure</h2>
+<p>The SNS event delivered to Lambda contains several important fields.</p>
+
+<table>
+  <tr>
+    <th>Field</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>Records</code></td>
+    <td>Array containing one or more event records.</td>
+  </tr>
+  <tr>
+    <td><code>EventSource</code></td>
+    <td>Identifies the source service. For SNS, the value is <code>aws:sns</code>.</td>
+  </tr>
+  <tr>
+    <td><code>Sns</code></td>
+    <td>Object containing the SNS notification details.</td>
+  </tr>
+  <tr>
+    <td><code>TopicArn</code></td>
+    <td>ARN of the SNS topic that published the message.</td>
+  </tr>
+  <tr>
+    <td><code>Subject</code></td>
+    <td>Optional subject of the SNS message.</td>
+  </tr>
+  <tr>
+    <td><code>Message</code></td>
+    <td>Main message payload sent through SNS.</td>
+  </tr>
+  <tr>
+    <td><code>MessageAttributes</code></td>
+    <td>Optional metadata that can be used for filtering or routing.</td>
+  </tr>
+</table>
+
+<h2>11. Why This Architecture Matters</h2>
+<p>
+This lab introduces a basic event-driven architecture pattern.
+Instead of one service directly calling another service, an event is published to SNS and then delivered to one or more subscribers.
+This creates a more flexible and decoupled design.
+</p>
+
+<p>For example, the same SNS topic can later send messages to:</p>
+
+<ul>
+  <li>Email subscribers</li>
+  <li>Lambda functions</li>
+  <li>Amazon SQS queues</li>
+  <li>HTTPS endpoints</li>
+  <li>Other event-processing systems</li>
+</ul>
+
+<h2>12. Professional Best Practices</h2>
+
+<h3>Reuse Existing Topics When Appropriate</h3>
+<p>
+The lab reused the existing <code>lab-cloudwatch-topic</code> instead of creating a new SNS topic.
+This is useful when the same notification should be consumed by multiple systems.
+</p>
+
+<h3>Use Least Privilege Permissions</h3>
+<p>
+SNS should only be allowed to invoke the Lambda function that needs to process the message.
+AWS automatically adds a resource-based policy to the Lambda function when the trigger is configured through the console.
+</p>
+
+<h3>Log the Full Event During Learning and Troubleshooting</h3>
+<p>
+Printing the full event is useful in a lab environment because it helps understand the structure of the payload.
+In production, logs should avoid exposing sensitive data.
+</p>
+
+<h3>Design for Multiple Records</h3>
+<p>
+The Lambda function loops through <code>event.get("Records", [])</code> instead of assuming only one message.
+This is a safer and more reusable pattern for event-driven workloads.
+</p>
+
+<h3>Prepare for Future Integrations</h3>
+<p>
+This setup prepares the environment for future labs involving Amazon EventBridge, Amazon S3 event notifications, SQS queues, and more advanced automation patterns.
+</p>
+
+<h2>13. Cost Considerations</h2>
+<p>
+This lab has a very low expected cost. It uses AWS Lambda, Amazon SNS, and CloudWatch Logs with minimal requests and very small log volume.
+For normal lab usage, this should remain within the AWS Free Tier limits.
+</p>
+
+<div class="warning">
+  <strong>Cost note:</strong> Avoid publishing large volumes of SNS messages or generating excessive Lambda logs. CloudWatch Logs can generate costs if log volume grows significantly.
+</div>
+
+<h2>14. Cleanup Guidance</h2>
+<p>
+Do not delete the following resources if continuing with the next labs:</p>
+
+<ul>
+  <li><code>lab-cloudwatch-topic</code></li>
+  <li><code>lab-hello-lambda</code></li>
+  <li>SNS trigger attached to the Lambda function</li>
+  <li>CloudWatch Log Group for the Lambda function</li>
+</ul>
+
+<p>
+These resources will be useful for future labs involving event-driven automation.
+</p>
+
+<h2>15. Final Architecture</h2>
+
+<pre>Amazon SNS Topic
+lab-cloudwatch-topic
+        |
+        | SNS subscription
+        v
+AWS Lambda Function
+lab-hello-lambda
+        |
+        | execution logs
+        v
+Amazon CloudWatch Logs
+/aws/lambda/lab-hello-lambda</pre>
+
+<h2>16. Lab Summary</h2>
+<p>In this lab, an existing Amazon SNS topic was integrated with an existing AWS Lambda function.</p>
+
+<p>The following tasks were completed:</p>
+
+<ul>
+  <li>Confirmed the existing Lambda function.</li>
+  <li>Updated the Lambda code to process SNS events.</li>
+  <li>Added Amazon SNS as a Lambda trigger.</li>
+  <li>Published a manual message to the SNS topic.</li>
+  <li>Validated the Lambda execution in CloudWatch Logs.</li>
+  <li>Analyzed the SNS event structure received by Lambda.</li>
+</ul>
+
+<p>
+This lab introduced a fundamental serverless event-driven pattern commonly used in professional AWS environments.
+</p>
+
+</body>
+</html>
