@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 21 - AWS Systems Manager Parameter Store</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f4f6f8; color: #222; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 30px; background-color: #ffffff; }
+        h1, h2, h3 { color: #1f2937; }
+        h1 { border-bottom: 3px solid #ff9900; padding-bottom: 10px; }
+        h2 { margin-top: 35px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+        code { background-color: #eef2f7; padding: 2px 5px; border-radius: 4px; font-family: Consolas, Monaco, monospace; }
+        pre { background-color: #111827; color: #f9fafb; padding: 18px; border-radius: 8px; overflow-x: auto; font-size: 14px; }
+        pre code { background: none; color: inherit; padding: 0; }
+        .note { background-color: #fff7ed; border-left: 5px solid #ff9900; padding: 15px; margin: 20px 0; }
+        .success { background-color: #ecfdf5; border-left: 5px solid #10b981; padding: 15px; margin: 20px 0; }
+        .warning { background-color: #fef2f2; border-left: 5px solid #ef4444; padding: 15px; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #f3f4f6; }
+        ul { margin-top: 8px; }
+        .diagram { background-color: #f9fafb; border: 1px solid #d1d5db; padding: 18px; border-radius: 8px; font-family: Consolas, Monaco, monospace; white-space: pre-wrap; }
+        .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 14px; color: #555; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+<h1>Lab 21 - AWS Systems Manager Parameter Store</h1>
+
+<h2>1. Lab Overview</h2>
+<p>In this lab, we used <strong>AWS Systems Manager Parameter Store</strong> to centralize application configuration and consume it from an EC2 instance without using SSH. The lab reused the existing EC2 instance that was already registered as a Systems Manager Managed Node in the previous lab.</p>
+<p>The main goal was to understand how configuration values can be stored outside application code and retrieved dynamically by scripts, services, or applications.</p>
+<div class="note"><strong>New concept introduced:</strong> AWS Systems Manager Parameter Store.</div>
+
+<h2>2. Business Scenario</h2>
+<p>In a real enterprise environment, applications often require configuration values such as environment names, log levels, API URLs, database endpoints, bucket names, and feature flags.</p>
+<p>Hardcoding these values directly in scripts or application code creates operational problems. Every time a configuration changes, teams may need to modify code, redeploy applications, or update multiple servers manually.</p>
+<p>Parameter Store solves this problem by providing a centralized location for configuration values. Applications and automation scripts can retrieve these values at runtime.</p>
+
+<h2>3. Learning Objectives</h2>
+<ul>
+<li>Create a standard parameter in AWS Systems Manager Parameter Store.</li>
+<li>Use hierarchical parameter naming.</li>
+<li>Retrieve parameter values using the AWS CLI.</li>
+<li>Use Systems Manager Run Command to execute commands on EC2 without SSH.</li>
+<li>Use a parameter value inside a Bash script.</li>
+<li>Update configuration centrally without changing the script.</li>
+<li>Generate an Apache HTML page dynamically using a value from Parameter Store.</li>
+</ul>
+
+<h2>4. AWS Services Used</h2>
+<table>
+<tr><th>Service</th><th>Purpose</th></tr>
+<tr><td>AWS Systems Manager Parameter Store</td><td>Stores configuration values centrally.</td></tr>
+<tr><td>AWS Systems Manager Run Command</td><td>Executes commands remotely on the EC2 instance without SSH.</td></tr>
+<tr><td>Amazon EC2</td><td>Runs the Apache web server and retrieves the parameter value.</td></tr>
+<tr><td>IAM Role</td><td>Allows the EC2 instance to communicate with Systems Manager.</td></tr>
+<tr><td>Apache HTTP Server</td><td>Serves the generated HTML page.</td></tr>
+<tr><td>Application Load Balancer</td><td>Provides public access to the web page.</td></tr>
+</table>
+
+<h2>5. Existing Infrastructure</h2>
+<p>This lab reused the infrastructure created in previous labs:</p>
+<ul>
+<li>EC2 instance: <code>lab-web-server</code></li>
+<li>Security Group for EC2: <code>lab-ec2-web-sg</code></li>
+<li>Security Group for ALB: <code>lab-alb-sg</code></li>
+<li>Application Load Balancer: <code>lab-web-alb</code></li>
+<li>Target Group: <code>lab-web-tg</code></li>
+<li>IAM Role: <code>lab-ec2-ssm-role</code></li>
+<li>Apache installed and running on the EC2 instance</li>
+<li>EC2 instance already registered as a Systems Manager Managed Node</li>
+</ul>
+
+<h2>6. Architecture Overview</h2>
+<div class="diagram">Administrator
+      |
+      v
+AWS Systems Manager Parameter Store
+      |
+      v
+AWS Systems Manager Run Command
+      |
+      v
+SSM Agent on EC2
+      |
+      v
+AWS CLI retrieves parameter value
+      |
+      v
+Apache serves generated HTML page</div>
+
+<h2>7. Why Parameter Store Matters</h2>
+<p>Before using Parameter Store, scripts often contain fixed values:</p>
+<pre><code>ENVIRONMENT="production"
+LOG_LEVEL="INFO"
+API_URL="https://api.example.com"</code></pre>
+<p>This approach is simple, but it does not scale well. If the value changes, the script must be edited and redeployed.</p>
+<p>With Parameter Store, the script retrieves the value dynamically:</p>
+<pre><code>ENVIRONMENT=$(aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1 \
+    --query "Parameter.Value" \
+    --output text)</code></pre>
+<p>The script remains unchanged, while the configuration can be updated centrally.</p>
+
+<h2>8. Step 1 - Create a Parameter</h2>
+<p>Open the AWS Console and navigate to:</p>
+<pre><code>Systems Manager &gt; Parameter Store &gt; Create parameter</code></pre>
+<p>Use the following settings:</p>
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td>Name</td><td><code>/lab/web/environment</code></td></tr>
+<tr><td>Description</td><td><code>Environment name for the lab web server</code></td></tr>
+<tr><td>Tier</td><td><code>Standard</code></td></tr>
+<tr><td>Type</td><td><code>String</code></td></tr>
+<tr><td>Data type</td><td><code>text</code></td></tr>
+<tr><td>Value</td><td><code>production</code></td></tr>
+</table>
+<p>Click <strong>Create parameter</strong>.</p>
+
+<h2>9. Step 2 - Verify the Parameter</h2>
+<p>In Parameter Store, open the parameter <code>/lab/web/environment</code> and confirm:</p>
+<ul>
+<li>Name: <code>/lab/web/environment</code></li>
+<li>Type: <code>String</code></li>
+<li>Tier: <code>Standard</code></li>
+<li>Value: <code>production</code></li>
+</ul>
+
+<h2>10. Step 3 - Read the Parameter from EC2 Using Run Command</h2>
+<p>Navigate to:</p>
+<pre><code>Systems Manager &gt; Run Command &gt; Run command</code></pre>
+<p>Select the document:</p>
+<pre><code>AWS-RunShellScript</code></pre>
+<p>Select the target instance:</p>
+<pre><code>lab-web-server</code></pre>
+<p>Run the following command:</p>
+<pre><code>aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1</code></pre>
+<p>Expected output:</p>
+<pre><code>{
+    "Parameter": {
+        "Name": "/lab/web/environment",
+        "Type": "String",
+        "Value": "production",
+        "Version": 1,
+        "ARN": "arn:aws:ssm:eu-north-1:ACCOUNT_ID:parameter/lab/web/environment",
+        "DataType": "text"
+    }
+}</code></pre>
+<div class="success">This confirmed that the EC2 instance could retrieve a value from Parameter Store using its IAM role and the AWS CLI.</div>
+
+<h2>11. Step 4 - Retrieve Only the Parameter Value</h2>
+<p>To retrieve only the value, use the AWS CLI <code>--query</code> and <code>--output text</code> options.</p>
+<pre><code>aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1 \
+    --query "Parameter.Value" \
+    --output text</code></pre>
+<p>Expected output:</p>
+<pre><code>production</code></pre>
+
+<h2>12. Step 5 - Use the Parameter in a Bash Script</h2>
+<p>The next step was to store the parameter value inside a Bash variable.</p>
+<pre><code>ENVIRONMENT=$(aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1 \
+    --query "Parameter.Value" \
+    --output text)
+
+echo "Current environment: $ENVIRONMENT"</code></pre>
+<p>Expected output:</p>
+<pre><code>Current environment: production</code></pre>
+<p>This is a common automation pattern. A script retrieves configuration from Parameter Store and then uses that value to control its behavior.</p>
+
+<h2>13. Step 6 - Update the Parameter Centrally</h2>
+<p>In Parameter Store, edit the parameter <code>/lab/web/environment</code> and change the value from:</p>
+<pre><code>production</code></pre>
+<p>to:</p>
+<pre><code>staging</code></pre>
+<p>Run the same script again:</p>
+<pre><code>ENVIRONMENT=$(aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1 \
+    --query "Parameter.Value" \
+    --output text)
+
+echo "Current environment: $ENVIRONMENT"</code></pre>
+<p>Expected output:</p>
+<pre><code>Current environment: staging</code></pre>
+<div class="success">The script did not change, but the output changed because the configuration was updated centrally in Parameter Store.</div>
+
+<h2>14. Step 7 - Generate a Dynamic Apache Web Page</h2>
+<p>The parameter value was then used to generate an HTML page served by Apache.</p>
+<pre><code>ENVIRONMENT=$(aws ssm get-parameter \
+    --name "/lab/web/environment" \
+    --region eu-north-1 \
+    --query "Parameter.Value" \
+    --output text)
+
+sudo tee /var/www/html/parameter-store.html &gt; /dev/null &lt;&lt;'HTML_PAGE'
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Lab 21 - Parameter Store&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Lab 21 - AWS Systems Manager Parameter Store&lt;/h1&gt;
+    &lt;p&gt;Current environment: $ENVIRONMENT&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+HTML_PAGE
+
+sudo systemctl restart httpd</code></pre>
+<p>The page was accessed through the Application Load Balancer:</p>
+<pre><code>http://lab-web-alb-1301999270.eu-north-1.elb.amazonaws.com/parameter-store.html</code></pre>
+<p>Expected page content:</p>
+<pre><code>Lab 21 - AWS Systems Manager Parameter Store
+Current environment: staging</code></pre>
+
+<h2>15. Step 8 - Change the Parameter Back to Production</h2>
+<p>The parameter value was changed again from:</p>
+<pre><code>staging</code></pre>
+<p>back to:</p>
+<pre><code>production</code></pre>
+<p>The same Run Command script was executed again to regenerate the Apache page.</p>
+<p>Expected result in the browser:</p>
+<pre><code>Current environment: production</code></pre>
+<div class="success">This validated that configuration can be changed centrally without modifying the script, the EC2 instance, or the Apache configuration manually.</div>
+
+<h2>16. Final Validated Flow</h2>
+<div class="diagram">Parameter Store
+/lab/web/environment = production
+      |
+      v
+Run Command executes script on EC2
+      |
+      v
+EC2 retrieves parameter using AWS CLI
+      |
+      v
+Script writes /var/www/html/parameter-store.html
+      |
+      v
+Apache serves the page through the ALB</div>
+
+<h2>17. Troubleshooting</h2>
+<h3>Problem: AccessDeniedException when reading the parameter</h3>
+<p>Possible cause:</p>
+<ul><li>The EC2 IAM role does not have permission to read parameters from Systems Manager Parameter Store.</li></ul>
+<p>Check:</p>
+<pre><code>aws sts get-caller-identity</code></pre>
+<p>Confirm that the EC2 instance is using the expected IAM role.</p>
+
+<h3>Problem: ParameterNotFound</h3>
+<p>Possible causes:</p>
+<ul><li>The parameter name is misspelled.</li><li>The wrong AWS Region is being used.</li></ul>
+<p>Check that the parameter name is exactly:</p>
+<pre><code>/lab/web/environment</code></pre>
+<p>Also confirm that the command uses:</p>
+<pre><code>--region eu-north-1</code></pre>
+
+<h3>Problem: Run Command does not show the EC2 instance as a target</h3>
+<p>Possible causes:</p>
+<ul><li>The SSM Agent is not running.</li><li>The IAM role is not attached to the instance.</li><li>The instance has not yet registered as a Managed Node.</li></ul>
+<p>Check the managed node inventory in:</p>
+<pre><code>Systems Manager &gt; Fleet Manager</code></pre>
+
+<h3>Problem: The browser does not show the updated page</h3>
+<p>Possible causes:</p>
+<ul><li>The page was not regenerated after changing the parameter.</li><li>Apache was not restarted.</li><li>The browser cached the previous version.</li></ul>
+<p>Try refreshing the page or opening it in a private browsing window.</p>
+
+<h2>18. Best Practices</h2>
+<ul>
+<li>Use hierarchical names such as <code>/application/component/setting</code>.</li>
+<li>Separate configuration from application code.</li>
+<li>Use IAM policies to restrict access to specific parameter paths.</li>
+<li>Use <code>SecureString</code> for sensitive values when appropriate.</li>
+<li>Do not store passwords or secrets as plain <code>String</code> parameters.</li>
+<li>Use Parameter Store for configuration values and AWS Secrets Manager for advanced secret lifecycle management.</li>
+<li>Use descriptive parameter names that make the purpose clear.</li>
+<li>Avoid hardcoding environment-specific values inside scripts.</li>
+</ul>
+
+<h2>19. Parameter Store vs Secrets Manager</h2>
+<table>
+<tr><th>Feature</th><th>Parameter Store</th><th>Secrets Manager</th></tr>
+<tr><td>Main use case</td><td>Configuration values and simple secrets</td><td>Secrets with rotation and lifecycle management</td></tr>
+<tr><td>Common examples</td><td>Environment name, log level, API endpoint, bucket name</td><td>Database password, API key, OAuth token</td></tr>
+<tr><td>Secret rotation</td><td>Manual or custom automation</td><td>Built-in rotation support</td></tr>
+<tr><td>Cost</td><td>Standard parameters are commonly used for low-cost configuration storage</td><td>Typically used for managed secrets and may have additional cost</td></tr>
+</table>
+
+<h2>20. Certification Relevance - AWS SAA-C03</h2>
+<p>Parameter Store is relevant for the AWS Solutions Architect Associate exam because it appears in scenarios involving centralized configuration, operational efficiency, security, and separation of configuration from code.</p>
+<p>Typical exam scenarios include:</p>
+<ul>
+<li>Applications needing environment-specific configuration.</li>
+<li>EC2 instances or Lambda functions needing to retrieve configuration values.</li>
+<li>Reducing hardcoded values in scripts or application code.</li>
+<li>Comparing Parameter Store with AWS Secrets Manager.</li>
+<li>Using IAM permissions to control access to configuration paths.</li>
+</ul>
+
+<h2>21. Key Takeaways</h2>
+<ul>
+<li>Parameter Store centralizes configuration values.</li>
+<li>Hierarchical names help organize parameters clearly.</li>
+<li>EC2 instances can retrieve parameters using the AWS CLI.</li>
+<li>Run Command allows remote execution without SSH.</li>
+<li>Scripts can consume parameters dynamically.</li>
+<li>Configuration can be changed centrally without modifying the script.</li>
+<li>This pattern is widely used in real cloud environments.</li>
+</ul>
+
+<h2>22. Cleanup and Cost Control</h2>
+<p>This lab used a standard Parameter Store parameter and reused existing infrastructure. No new EC2 instances were created.</p>
+<p>Recommended cleanup decision:</p>
+<ul>
+<li>Keep the parameter <code>/lab/web/environment</code> for future labs.</li>
+<li>Keep the IAM role <code>lab-ec2-ssm-role</code>.</li>
+<li>Keep the EC2 instance if it will be reused in the next lab.</li>
+<li>Stop the EC2 instance when not in use to reduce compute costs.</li>
+</ul>
+
+<div class="note">The next recommended lab is <strong>Lab 22 - AWS Systems Manager Session Manager</strong>, which will demonstrate how to access EC2 interactively without SSH, without port 22, and without a PEM key.</div>
+
+<div class="footer">
+<p>Lab 21 completed: AWS Systems Manager Parameter Store.</p>
+<p>Focus: centralized configuration, EC2 automation, Run Command, Apache integration, and enterprise cloud administration practices.</p>
+</div>
+
+</div>
+</body>
+</html>

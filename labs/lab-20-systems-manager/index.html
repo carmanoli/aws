@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 20 - AWS Systems Manager Run Command</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; color: #222; }
+    h1, h2, h3 { color: #1f2937; }
+    code, pre { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { padding: 14px; overflow-x: auto; border-left: 4px solid #2563eb; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f3f4f6; }
+    .note { background: #eef6ff; border-left: 4px solid #2563eb; padding: 12px; margin: 20px 0; }
+    .warning { background: #fff7ed; border-left: 4px solid #f97316; padding: 12px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+<h1>Lab 20 - AWS Systems Manager Run Command</h1>
+
+<h2>1. Lab Objective</h2>
+<p>The objective of this lab is to introduce AWS Systems Manager as a practical tool for managing EC2 instances without using SSH. The lab focuses on registering an EC2 instance as a managed node and using Run Command to execute operational commands remotely.</p>
+
+<h2>2. Scenario</h2>
+<p>A cloud administrator needs to manage an EC2 instance securely without opening port 22, using SSH keys, or connecting directly to the server. The administrator must be able to verify system state and restart services remotely.</p>
+
+<h2>3. Existing Infrastructure</h2>
+<table>
+  <tr><th>Resource</th><th>Name</th></tr>
+  <tr><td>EC2 Instance</td><td>lab-web-server</td></tr>
+  <tr><td>EC2 Security Group</td><td>lab-ec2-web-sg</td></tr>
+  <tr><td>Application Load Balancer</td><td>lab-web-alb</td></tr>
+  <tr><td>Target Group</td><td>lab-web-tg</td></tr>
+  <tr><td>Apache Web Server</td><td>httpd</td></tr>
+</table>
+
+<h2>4. New AWS Concept Introduced</h2>
+<p>The new concept introduced in this lab is AWS Systems Manager, specifically:</p>
+<ul>
+  <li>Managed Nodes</li>
+  <li>SSM Agent</li>
+  <li>IAM Role for EC2</li>
+  <li>Run Command</li>
+</ul>
+
+<h2>5. Why This Matters in Real Environments</h2>
+<p>In professional AWS environments, administrators often avoid direct SSH access to production servers. Instead, they use AWS Systems Manager to execute commands, manage instances, collect inventory, apply patches, and troubleshoot systems securely.</p>
+
+<p>This approach reduces the attack surface because it avoids exposing SSH to the internet and removes the need to manage SSH keys manually.</p>
+
+<h2>6. Systems Manager Requirements</h2>
+<p>For an EC2 instance to appear in Systems Manager as a managed node, the following requirements must be met:</p>
+<ul>
+  <li>The SSM Agent must be installed and running on the instance.</li>
+  <li>The EC2 instance must have outbound connectivity to Systems Manager endpoints.</li>
+  <li>The EC2 instance must have an IAM Role with the required permissions.</li>
+  <li>The instance must have time to register with Systems Manager.</li>
+</ul>
+
+<h2>7. Step 1 - Verify the EC2 Instance State</h2>
+<p>Open the EC2 console and verify that the instance <code>lab-web-server</code> is in the <code>Running</code> state.</p>
+
+<h2>8. Step 2 - Check Fleet Manager</h2>
+<p>Open AWS Systems Manager and navigate to:</p>
+<pre>Systems Manager → Fleet Manager</pre>
+
+<p>Initially, the instance did not appear. This indicated that one of the Systems Manager requirements was missing.</p>
+
+<h2>9. Step 3 - Check the EC2 IAM Role</h2>
+<p>In the EC2 console, select the instance <code>lab-web-server</code> and open the <code>Security</code> tab.</p>
+<p>The instance did not have an IAM Role attached.</p>
+
+<h2>10. Step 4 - Create an IAM Role for Systems Manager</h2>
+<p>Open the IAM console and create a new role:</p>
+
+<pre>IAM → Roles → Create role</pre>
+
+<p>Configuration:</p>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Trusted entity</td><td>AWS service</td></tr>
+  <tr><td>Use case</td><td>EC2</td></tr>
+  <tr><td>Policy</td><td>AmazonSSMManagedInstanceCore</td></tr>
+  <tr><td>Role name</td><td>lab-ec2-ssm-role</td></tr>
+</table>
+
+<div class="note">
+  <p><strong>Technical note:</strong> In AWS, EC2 instances should use IAM Roles to obtain temporary credentials. Access keys should not be stored inside EC2 instances.</p>
+</div>
+
+<h2>11. Step 5 - Attach the IAM Role to the EC2 Instance</h2>
+<p>Open the EC2 console and select <code>lab-web-server</code>.</p>
+
+<pre>Actions → Security → Modify IAM role</pre>
+
+<p>Select the role:</p>
+<pre>lab-ec2-ssm-role</pre>
+
+<p>Then click <code>Update IAM role</code>.</p>
+
+<h2>12. Step 6 - Wait for Systems Manager Registration</h2>
+<p>After attaching the IAM Role, wait a few minutes and refresh Fleet Manager.</p>
+<p>The instance may take between 1 and 5 minutes to appear because Systems Manager registration is not always immediate.</p>
+
+<h2>13. Step 7 - Verify the SSM Agent</h2>
+<p>On the EC2 instance, verify that the SSM Agent is running:</p>
+
+<pre>sudo systemctl status amazon-ssm-agent</pre>
+
+<p>The expected result is:</p>
+
+<pre>Active: active (running)</pre>
+
+<h2>14. Step 8 - Verify Connectivity to the SSM Endpoint</h2>
+<p>Run the following command from the EC2 instance:</p>
+
+<pre>curl -I https://ssm.eu-north-1.amazonaws.com</pre>
+
+<p>The result was:</p>
+
+<pre>HTTP/1.1 400 Bad Request</pre>
+
+<p>This response is acceptable for this test. The important point is that the instance successfully reached the Systems Manager endpoint over HTTPS.</p>
+
+<h2>15. Step 9 - Check the SSM Agent Logs</h2>
+<p>The SSM Agent logs were checked using:</p>
+
+<pre>sudo tail -50 /var/log/amazon/ssm/amazon-ssm-agent.log</pre>
+
+<p>The logs confirmed successful communication with Systems Manager:</p>
+
+<pre>Successfully opened websocket connection
+Set up control channel successfully
+Agent will take identity from EC2
+Successfully created ssm-user</pre>
+
+<p>This confirmed that the EC2 instance was correctly registered and able to communicate with Systems Manager.</p>
+
+<h2>16. Step 10 - Run the First Remote Command</h2>
+<p>Open:</p>
+
+<pre>Systems Manager → Run Command → Run command</pre>
+
+<p>Select the command document:</p>
+
+<pre>AWS-RunShellScript</pre>
+
+<p>In the commands field, enter:</p>
+
+<pre>hostname</pre>
+
+<p>Target selection:</p>
+
+<pre>Choose instances manually → lab-web-server</pre>
+
+<p>Run the command.</p>
+
+<h2>17. Command Result</h2>
+<p>The command completed successfully and returned:</p>
+
+<pre>ip-172-31-31-235.eu-north-1.compute.internal</pre>
+
+<p>This confirms that the command was executed remotely on the EC2 instance through Systems Manager.</p>
+
+<h2>18. Step 11 - Check Apache Status Remotely</h2>
+<p>Using Run Command again, execute:</p>
+
+<pre>systemctl status httpd --no-pager</pre>
+
+<p>The result confirmed that Apache was running:</p>
+
+<pre>Active: active (running)</pre>
+
+<p>The service was also confirmed to be listening on port 80.</p>
+
+<h2>19. Step 12 - Restart Apache Remotely</h2>
+<p>To simulate a real operational task, Apache was restarted remotely using Run Command:</p>
+
+<pre>sudo systemctl restart httpd
+sudo systemctl status httpd --no-pager</pre>
+
+<p>The result confirmed that Apache restarted successfully:</p>
+
+<pre>Active: active (running)</pre>
+
+<p>The new process ID confirmed that the service was actually restarted.</p>
+
+<h2>20. Technical Flow</h2>
+<pre>Administrator
+     │
+     ▼
+AWS Systems Manager
+     │
+     ▼
+Run Command Document: AWS-RunShellScript
+     │
+     ▼
+SSM Agent on EC2
+     │
+     ▼
+Command executed on the instance
+     │
+     ▼
+Output captured by SSM Agent
+     │
+     ▼
+Result displayed in Systems Manager Console</pre>
+
+<h2>21. Security Benefits</h2>
+<ul>
+  <li>No SSH connection was required.</li>
+  <li>No port 22 exposure was required.</li>
+  <li>No PEM key was needed.</li>
+  <li>No access keys were stored on the instance.</li>
+  <li>Authentication was handled through the EC2 IAM Role.</li>
+  <li>Commands were executed and audited through AWS Systems Manager.</li>
+</ul>
+
+<h2>22. Troubleshooting Summary</h2>
+<table>
+  <tr><th>Problem</th><th>Verification</th><th>Result</th></tr>
+  <tr><td>Instance not visible in Fleet Manager</td><td>Checked IAM Role</td><td>No IAM Role attached</td></tr>
+  <tr><td>Missing Systems Manager permissions</td><td>Created IAM Role</td><td>lab-ec2-ssm-role created</td></tr>
+  <tr><td>SSM Agent status</td><td>systemctl status amazon-ssm-agent</td><td>Agent active</td></tr>
+  <tr><td>SSM endpoint connectivity</td><td>curl to ssm.eu-north-1.amazonaws.com</td><td>Endpoint reachable</td></tr>
+  <tr><td>Agent registration</td><td>Checked SSM logs</td><td>Successful WebSocket connection</td></tr>
+</table>
+
+<h2>23. Cost Considerations</h2>
+<p>AWS Systems Manager Run Command and Session Manager can generally be used without additional cost for standard EC2 management tasks. This lab reused the existing EC2 instance and did not require provisioning expensive resources.</p>
+
+<div class="warning">
+  <p>To reduce costs when not working on the labs, stop the EC2 instance if it is not needed. Do not terminate it unless the infrastructure is no longer required.</p>
+</div>
+
+<h2>24. Cleanup</h2>
+<p>No cleanup was performed at the end of this lab because the IAM Role and Systems Manager configuration will be reused in future labs.</p>
+
+<p>Resources kept for future use:</p>
+<ul>
+  <li>IAM Role: <code>lab-ec2-ssm-role</code></li>
+  <li>EC2 Instance: <code>lab-web-server</code></li>
+  <li>SSM Agent registration</li>
+</ul>
+
+<h2>25. Final Result</h2>
+<p>At the end of this lab, the EC2 instance <code>lab-web-server</code> was successfully managed through AWS Systems Manager. Remote commands were executed without SSH, and Apache was verified and restarted through Run Command.</p>
+
+<h2>26. Key Takeaways</h2>
+<ul>
+  <li>Systems Manager is a practical service for managing EC2 instances securely.</li>
+  <li>IAM Roles are the correct way to grant AWS permissions to EC2 instances.</li>
+  <li>Run Command allows administrators to execute commands remotely without SSH.</li>
+  <li>SSM Agent communicates with AWS using HTTPS and WebSockets.</li>
+  <li>This approach is commonly used in enterprise environments to reduce operational risk.</li>
+</ul>
+
+<h2>27. Next Lab</h2>
+<p>The next lab will introduce AWS Systems Manager Parameter Store. The goal will be to store configuration values in AWS and allow the EC2 instance to read them securely using its IAM Role, without hardcoded credentials.</p>
+
+</body>
+</html>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 19 - Amazon EventBridge Rules</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; color: #222; }
+    h1, h2, h3 { color: #1f2937; }
+    code, pre { background: #f3f4f6; border-radius: 6px; }
+    code { padding: 2px 5px; }
+    pre { padding: 14px; overflow-x: auto; border: 1px solid #ddd; }
+    .note { background: #fff7ed; border-left: 5px solid #f97316; padding: 12px 16px; margin: 18px 0; }
+    .ok { background: #ecfdf5; border-left: 5px solid #10b981; padding: 12px 16px; margin: 18px 0; }
+    .warn { background: #fef2f2; border-left: 5px solid #ef4444; padding: 12px 16px; margin: 18px 0; }
+    table { border-collapse: collapse; width: 100%; margin: 18px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f3f4f6; }
+  </style>
+</head>
+<body>
+
+<h1>Lab 19 - Amazon EventBridge Rules: Event-Driven Architecture</h1>
+
+<h2>1. Lab Objective</h2>
+<p>The objective of this lab is to learn how to use Amazon EventBridge Rules to react to real AWS service events instead of scheduled events.</p>
+
+<p>In the previous lab, EventBridge Scheduler was used to invoke a Lambda function on a recurring schedule. In this lab, EventBridge reacts to a real AWS API activity captured by AWS CloudTrail.</p>
+
+<p>The final architecture is:</p>
+
+<pre><code>EC2 StopInstances API call
+        ↓
+AWS CloudTrail Trail
+        ↓
+Amazon EventBridge Rule
+        ↓
+AWS Lambda function
+        ↓
+Amazon CloudWatch Logs</code></pre>
+
+<h2>2. Existing Resources</h2>
+
+<table>
+  <tr><th>Resource</th><th>Name</th></tr>
+  <tr><td>Lambda Function</td><td>lab-hello-lambda</td></tr>
+  <tr><td>EC2 Instance</td><td>lab-web-server</td></tr>
+  <tr><td>EventBridge Rule</td><td>lab-lambda-change-rule</td></tr>
+  <tr><td>CloudTrail Trail</td><td>lab-cloudtrail</td></tr>
+  <tr><td>Region</td><td>eu-north-1</td></tr>
+</table>
+
+<h2>3. Why This Lab Matters</h2>
+
+<p>Event-driven architectures are widely used in professional AWS environments. Instead of polling for changes, applications can react automatically when something happens.</p>
+
+<p>Common use cases include:</p>
+
+<ul>
+  <li>Detecting when EC2 instances are stopped or started.</li>
+  <li>Triggering automated remediation workflows.</li>
+  <li>Sending notifications when infrastructure changes.</li>
+  <li>Starting serverless workflows after AWS API activity.</li>
+  <li>Auditing and reacting to security-relevant events.</li>
+</ul>
+
+<h2>4. Important AWS 2026 Note</h2>
+
+<div class="note">
+  <p>During this lab, an important behavior was identified. Creating an EventBridge Rule from the AWS Console may create the rule in the normal <code>ENABLED</code> state. However, to process all CloudTrail management events, the rule may need to be enabled with the special state:</p>
+  <pre><code>ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS</code></pre>
+  <p>This setting was applied through the AWS CLI.</p>
+</div>
+
+<p>This was the key troubleshooting discovery in the lab. The rule pattern was correct, the Lambda target was correct, and CloudTrail was logging the event, but EventBridge did not match the event until the rule state was updated using the CLI.</p>
+
+<h2>5. Step 1 - Create the EventBridge Rule</h2>
+
+<p>Open the AWS Console and go to:</p>
+
+<pre><code>Amazon EventBridge → Rules → Create rule</code></pre>
+
+<p>Configure the rule details:</p>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Name</td><td>lab-lambda-change-rule</td></tr>
+  <tr><td>Description</td><td>Trigger Lambda when EC2 StopInstances API activity occurs</td></tr>
+  <tr><td>Event bus</td><td>default</td></tr>
+  <tr><td>Status</td><td>Enabled</td></tr>
+</table>
+
+<p>Select the advanced builder if available.</p>
+
+<h2>6. Step 2 - Configure the Event Pattern</h2>
+
+<p>The final working event pattern used in this lab was based on the official AWS example for reacting to EC2 API calls through CloudTrail.</p>
+
+<p>Use a custom JSON event pattern:</p>
+
+<pre><code>{
+  "source": ["aws.ec2"],
+  "detail-type": ["AWS API Call via CloudTrail"],
+  "detail": {
+    "eventSource": ["ec2.amazonaws.com"],
+    "eventName": ["StopInstances"]
+  }
+}</code></pre>
+
+<p>This pattern means:</p>
+
+<ul>
+  <li>The event must come from Amazon EC2.</li>
+  <li>The event must be an AWS API call captured through CloudTrail.</li>
+  <li>The API source must be <code>ec2.amazonaws.com</code>.</li>
+  <li>The API operation must be <code>StopInstances</code>.</li>
+</ul>
+
+<h2>7. Step 3 - Select the Lambda Target</h2>
+
+<p>For the target, select:</p>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Target type</td><td>AWS service</td></tr>
+  <tr><td>Target</td><td>Lambda function</td></tr>
+  <tr><td>Function</td><td>lab-hello-lambda</td></tr>
+  <tr><td>Input</td><td>Matched event</td></tr>
+</table>
+
+<p>Using <code>Matched event</code> is important because it sends the full EventBridge event to the Lambda function. This allows the Lambda function to inspect fields such as <code>source</code>, <code>detail-type</code>, <code>eventName</code>, and <code>userIdentity</code>.</p>
+
+<h2>8. Step 4 - Create a CloudTrail Trail</h2>
+
+<p>CloudTrail Event History alone was not enough for this lab. A CloudTrail Trail was created so that management events could be delivered and used by EventBridge.</p>
+
+<p>Go to:</p>
+
+<pre><code>CloudTrail → Trails → Create trail</code></pre>
+
+<p>Configure the trail:</p>
+
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Trail name</td><td>lab-cloudtrail</td></tr>
+  <tr><td>Storage location</td><td>Create new S3 bucket</td></tr>
+  <tr><td>SSE-KMS encryption</td><td>Disabled</td></tr>
+  <tr><td>Log file validation</td><td>Disabled</td></tr>
+  <tr><td>SNS notification delivery</td><td>Disabled</td></tr>
+  <tr><td>CloudWatch Logs</td><td>Disabled</td></tr>
+</table>
+
+<p>On the log events page, configure:</p>
+
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Management events</td><td>Enabled</td></tr>
+  <tr><td>Read events</td><td>Disabled</td></tr>
+  <tr><td>Write events</td><td>Enabled</td></tr>
+  <tr><td>Data events</td><td>Disabled</td></tr>
+  <tr><td>Insights events</td><td>Disabled</td></tr>
+  <tr><td>Network activity events</td><td>Disabled</td></tr>
+</table>
+
+<p>The trail status must show:</p>
+
+<pre><code>Logging</code></pre>
+
+<h2>9. Step 5 - Update the Rule State with AWS CLI</h2>
+
+<p>The EventBridge rule had to be updated through AWS CLI to enable CloudTrail management events properly.</p>
+
+<p>Open AWS CloudShell and run:</p>
+
+<pre><code>aws events put-rule \
+  --name lab-lambda-change-rule \
+  --event-bus-name default \
+  --state ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS \
+  --event-pattern '{
+    "source": ["aws.ec2"],
+    "detail-type": ["AWS API Call via CloudTrail"],
+    "detail": {
+      "eventSource": ["ec2.amazonaws.com"],
+      "eventName": ["StopInstances"]
+    }
+  }'</code></pre>
+
+<p>The expected output is similar to:</p>
+
+<pre><code>{
+    "RuleArn": "arn:aws:events:eu-north-1:ACCOUNT_ID:rule/lab-lambda-change-rule"
+}</code></pre>
+
+<h2>10. Step 6 - Generate the Real Event</h2>
+
+<p>To trigger the EventBridge rule, the EC2 instance must be stopped.</p>
+
+<p>Go to:</p>
+
+<pre><code>EC2 → Instances → lab-web-server</code></pre>
+
+<p>If the instance is stopped, start it first. Wait until it reaches the <code>Running</code> state.</p>
+
+<p>Then stop the instance:</p>
+
+<pre><code>Instance state → Stop instance</code></pre>
+
+<p>This generates the EC2 API call:</p>
+
+<pre><code>StopInstances</code></pre>
+
+<h2>11. Step 7 - Validate in EventBridge Monitoring</h2>
+
+<p>Go to:</p>
+
+<pre><code>EventBridge → Rules → lab-lambda-change-rule → Monitoring</code></pre>
+
+<p>The following metrics confirmed that the rule worked:</p>
+
+<table>
+  <tr><th>Metric</th><th>Observed Result</th></tr>
+  <tr><td>MatchedEvents</td><td>1</td></tr>
+  <tr><td>Invocations</td><td>1</td></tr>
+</table>
+
+<div class="ok">
+  <p>This confirms that EventBridge matched the EC2 StopInstances event and invoked the Lambda target.</p>
+</div>
+
+<h2>12. Step 8 - Validate in CloudWatch Logs</h2>
+
+<p>Go to:</p>
+
+<pre><code>CloudWatch → Log groups → /aws/lambda/lab-hello-lambda</code></pre>
+
+<p>Open the latest log stream.</p>
+
+<p>The Lambda function received an EventBridge event similar to:</p>
+
+<pre><code>{
+  "version": "0",
+  "id": "640b3726-d124-3aed-d904-df700c483fa5",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.ec2",
+  "account": "ACCOUNT_ID",
+  "time": "2026-07-05T12:01:17Z",
+  "region": "eu-north-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.11",
+    "eventSource": "ec2.amazonaws.com",
+    "eventName": "StopInstances"
+  }
+}</code></pre>
+
+<p>This confirms the complete event-driven chain:</p>
+
+<pre><code>EC2 StopInstances → CloudTrail → EventBridge → Lambda → CloudWatch Logs</code></pre>
+
+<h2>13. Troubleshooting Performed</h2>
+
+<p>This lab included real troubleshooting. The first attempt used Lambda configuration events, specifically:</p>
+
+<pre><code>UpdateFunctionConfiguration20150331v2</code></pre>
+
+<p>CloudTrail Event History showed the event, but EventBridge did not match it. The EventBridge Sandbox was then used to test event patterns with a valid EventBridge event structure.</p>
+
+<p>The main lessons learned were:</p>
+
+<ul>
+  <li>CloudTrail Event History and EventBridge events are related but not presented in exactly the same format.</li>
+  <li>EventBridge Sandbox is useful to validate event patterns before relying on them in a rule.</li>
+  <li>The EventBridge Console may not expose every state or behavior available in the API.</li>
+  <li>AWS CLI is essential for troubleshooting and professional cloud operations.</li>
+  <li>CloudTrail management events required the rule state <code>ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS</code>.</li>
+</ul>
+
+<h2>14. Disable the Rule After the Lab</h2>
+
+<p>To avoid unnecessary invocations, the rule was disabled at the end of the lab.</p>
+
+<p>The AWS Console did not allow disabling the rule directly, so AWS CLI was used:</p>
+
+<pre><code>aws events disable-rule \
+  --name lab-lambda-change-rule \
+  --region eu-north-1</code></pre>
+
+<p>To verify the state:</p>
+
+<pre><code>aws events describe-rule \
+  --name lab-lambda-change-rule \
+  --region eu-north-1</code></pre>
+
+<p>The expected result is:</p>
+
+<pre><code>"State": "DISABLED"</code></pre>
+
+<h2>15. Cost Considerations</h2>
+
+<ul>
+  <li>The EC2 instance was stopped after testing to avoid compute costs.</li>
+  <li>The EventBridge rule was disabled to avoid unnecessary Lambda invocations.</li>
+  <li>The CloudTrail Trail writes logs to S3, so small S3 storage costs may apply over time.</li>
+  <li>Only write management events were enabled to reduce event volume.</li>
+  <li>Data events and Insights events were disabled because they are not required for this lab and may increase costs.</li>
+</ul>
+
+<div class="warn">
+  <p>If this lab environment is not needed for future labs, consider stopping CloudTrail logging or deleting the trail and its S3 bucket after reviewing the logs. If future labs will continue using CloudTrail and EventBridge, keeping the trail can be useful.</p>
+</div>
+
+<h2>16. Final Result</h2>
+
+<p>The lab was successfully completed.</p>
+
+<p>The working architecture is:</p>
+
+<pre><code>Amazon EC2
+  StopInstances API call
+        ↓
+AWS CloudTrail Trail
+  lab-cloudtrail
+        ↓
+Amazon EventBridge Rule
+  lab-lambda-change-rule
+        ↓
+AWS Lambda
+  lab-hello-lambda
+        ↓
+Amazon CloudWatch Logs
+  /aws/lambda/lab-hello-lambda</code></pre>
+
+<h2>17. Key Takeaways</h2>
+
+<ul>
+  <li>EventBridge Rules are used to react to real events from AWS services.</li>
+  <li>EventBridge Scheduler should be used for scheduled tasks.</li>
+  <li>CloudTrail is required for AWS API Call events.</li>
+  <li>Event patterns must be precise and should be tested.</li>
+  <li>CloudWatch Logs are essential to validate serverless event-driven workflows.</li>
+  <li>AWS CLI is often required when the Console does not expose advanced behavior.</li>
+</ul>
+
+</body>
+</html>
