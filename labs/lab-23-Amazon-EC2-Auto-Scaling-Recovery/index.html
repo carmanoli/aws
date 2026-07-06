@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 23 - Amazon EC2 Auto Scaling Recovery</title>
+
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    max-width:1100px;
+    margin:auto;
+    line-height:1.6;
+    background:#ffffff;
+    color:#333;
+    padding:40px;
+}
+h1,h2,h3{
+    color:#1f4e79;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-bottom:25px;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+.note{
+    background:#eef7ff;
+    border-left:5px solid #1f77b4;
+    padding:15px;
+    margin:20px 0;
+}
+.warning{
+    background:#fff8e5;
+    border-left:5px solid #f0ad4e;
+    padding:15px;
+    margin:20px 0;
+}
+.success{
+    background:#eefbea;
+    border-left:5px solid #28a745;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>Lab 23 – Amazon EC2 Auto Scaling Recovery</h1>
+
+<h2>Objective</h2>
+
+<p>
+Learn how Amazon EC2 Auto Scaling automatically replaces failed EC2 instances,
+maintaining service availability without manual intervention.
+</p>
+
+<p>
+During this lab the existing infrastructure built in previous labs is reused.
+</p>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>Launch Template (lab-web-template)</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Systems Manager</li>
+<li>Session Manager</li>
+<li>Parameter Store</li>
+<li>GitHub automatic deployment through User Data</li>
+<li>IAM Role for Systems Manager (lab-ec2-ssm-role)</li>
+</ul>
+
+<hr>
+
+<h2>Existing Infrastructure</h2>
+
+<table>
+
+<tr><th>Resource</th><th>Name</th></tr>
+
+<tr><td>Launch Template</td><td>lab-web-template</td></tr>
+
+<tr><td>EC2 Security Group</td><td>lab-ec2-web-sg</td></tr>
+
+<tr><td>ALB Security Group</td><td>lab-alb-sg</td></tr>
+
+<tr><td>Target Group</td><td>lab-web-tg</td></tr>
+
+<tr><td>Application Load Balancer</td><td>lab-web-alb</td></tr>
+
+<tr><td>IAM Role</td><td>lab-ec2-ssm-role</td></tr>
+
+</table>
+
+<hr>
+
+<h2>Architecture</h2>
+
+<pre>
+Internet
+      |
+      |
+Application Load Balancer
+      |
+      |
+ Target Group
+      |
+      |
+Auto Scaling Group
+      |
+      |
+    EC2 Instance
+</pre>
+
+<hr>
+
+<h2>Step 1 - Verify the Launch Template</h2>
+
+<p>
+The original Launch Template was created before Systems Manager was introduced.
+Therefore it did not contain the IAM Instance Profile required for Session Manager.
+</p>
+
+<p>
+Navigate to:
+</p>
+
+<pre>
+EC2
+    Launch Templates
+        lab-web-template
+</pre>
+
+Verify that no IAM Instance Profile is configured.
+
+<hr>
+
+<h2>Step 2 - Create Launch Template Version 2</h2>
+
+<p>Create a new Launch Template version.</p>
+
+<p>Modify only:</p>
+
+<table>
+
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>IAM Instance Profile</td>
+<td>lab-ec2-ssm-role</td>
+</tr>
+
+<tr>
+<td>Description</td>
+<td>Version 2 - Add SSM IAM Instance Profile</td>
+</tr>
+
+</table>
+
+<div class="note">
+
+Always create a new Launch Template version instead of modifying an existing one.
+
+This is the recommended enterprise practice.
+
+</div>
+
+<hr>
+
+<h2>Step 3 - Create the Auto Scaling Group</h2>
+
+<p>Create a new Auto Scaling Group.</p>
+
+<table>
+
+<tr><th>Setting</th><th>Value</th></tr>
+
+<tr><td>Name</td><td>lab-we-asg</td></tr>
+
+<tr><td>Launch Template</td><td>lab-web-template</td></tr>
+
+<tr><td>Version</td><td>2</td></tr>
+
+<tr><td>VPC</td><td>Existing VPC</td></tr>
+
+<tr><td>Availability Zones</td><td>eu-north-1a, eu-north-1b</td></tr>
+
+</table>
+
+<hr>
+
+<h2>Step 4 - Attach the Target Group</h2>
+
+<p>Select:</p>
+
+<pre>
+Attach to an existing load balancer
+</pre>
+
+<p>Choose:</p>
+
+<pre>
+lab-web-tg
+</pre>
+
+<p>Enable:</p>
+
+<ul>
+
+<li>Elastic Load Balancing Health Checks</li>
+
+<li>Health Check Grace Period = 300 seconds</li>
+
+</ul>
+
+<hr>
+
+<h2>Step 5 - Configure Capacity</h2>
+
+<table>
+
+<tr><th>Parameter</th><th>Value</th></tr>
+
+<tr><td>Desired Capacity</td><td>1</td></tr>
+
+<tr><td>Minimum Capacity</td><td>1</td></tr>
+
+<tr><td>Maximum Capacity</td><td>1</td></tr>
+
+<tr><td>Scaling Policy</td><td>None</td></tr>
+
+</table>
+
+<div class="note">
+
+The objective of this lab is automatic recovery, not automatic scaling.
+
+</div>
+
+<hr>
+
+<h2>Step 6 - Validate the New Instance</h2>
+
+<p>
+After creation, Auto Scaling launches a new EC2 instance.
+</p>
+
+<p>Validate:</p>
+
+<ul>
+
+<li>Instance is Running</li>
+
+<li>Target Group registers the instance automatically</li>
+
+<li>Initial health status may be Unhealthy</li>
+
+<li>Eventually becomes Healthy</li>
+
+</ul>
+
+<div class="warning">
+
+It is normal for the Target Group to report Unhealthy during User Data execution.
+
+The instance becomes Healthy after Apache starts responding successfully.
+
+</div>
+
+<hr>
+
+<h2>Step 7 - Remove the Old Manual Instance</h2>
+
+<p>
+The original EC2 instance was created manually in previous labs and does not belong to the Auto Scaling Group.
+</p>
+
+<p>
+Terminate the manual instance.
+</p>
+
+<p>
+The Auto Scaling Group instance continues serving the application.
+</p>
+
+<hr>
+
+<h2>Step 8 - Test Automatic Recovery</h2>
+
+<p>
+Terminate the EC2 instance managed by the Auto Scaling Group.
+</p>
+
+<p>
+Observe:
+</p>
+
+<ol>
+
+<li>Instance enters Shutting-down.</li>
+
+<li>Instance becomes Terminated.</li>
+
+<li>Auto Scaling detects desired capacity is no longer satisfied.</li>
+
+<li>A replacement instance is launched automatically.</li>
+
+<li>User Data executes.</li>
+
+<li>GitHub deployment runs automatically.</li>
+
+<li>Apache starts.</li>
+
+<li>Target Group registers the instance.</li>
+
+<li>ALB Health Checks succeed.</li>
+
+<li>Application becomes available again.</li>
+
+</ol>
+
+<hr>
+
+<h2>Recovery Workflow</h2>
+
+<pre>
+Instance Failure
+       |
+       |
+Auto Scaling detects capacity loss
+       |
+       |
+Launch new EC2
+       |
+       |
+User Data executes
+       |
+       |
+Apache starts
+       |
+       |
+Target Group Health Check
+       |
+       |
+Healthy
+       |
+       |
+ALB routes traffic again
+</pre>
+
+<hr>
+
+<h2>Validate Systems Manager</h2>
+
+<p>
+Verify that the replacement instance automatically appears under:
+</p>
+
+<pre>
+Systems Manager
+    Fleet Manager
+</pre>
+
+<p>
+or
+</p>
+
+<pre>
+Session Manager
+</pre>
+
+<p>
+This confirms that the IAM Instance Profile included in Launch Template Version 2 is functioning correctly.
+</p>
+
+<hr>
+
+<h2>Technical Concepts Learned</h2>
+
+<ul>
+
+<li>Launch Template versioning</li>
+
+<li>IAM Instance Profiles inside Launch Templates</li>
+
+<li>Auto Scaling Groups</li>
+
+<li>Desired Capacity</li>
+
+<li>Minimum Capacity</li>
+
+<li>Maximum Capacity</li>
+
+<li>Application Load Balancer integration</li>
+
+<li>Target Group registration</li>
+
+<li>Health Checks</li>
+
+<li>User Data execution during recovery</li>
+
+<li>Automatic GitHub deployment</li>
+
+<li>Systems Manager integration</li>
+
+<li>Self-healing infrastructure</li>
+
+</ul>
+
+<hr>
+
+<h2>Enterprise Best Practices</h2>
+
+<ul>
+
+<li>Never modify existing Launch Templates directly.</li>
+
+<li>Create new Launch Template versions.</li>
+
+<li>Use Auto Scaling Groups even for a single production instance.</li>
+
+<li>Treat EC2 instances as disposable resources.</li>
+
+<li>Automate instance configuration using User Data.</li>
+
+<li>Use Systems Manager instead of SSH whenever possible.</li>
+
+<li>Always protect applications with Load Balancers.</li>
+
+</ul>
+
+<hr>
+
+<h2>Lab Outcome</h2>
+
+<div class="success">
+
+The infrastructure successfully recovered from an intentional EC2 failure.
+
+A replacement instance was automatically created, configured through User Data,
+registered in the Target Group, became Healthy behind the Application Load Balancer,
+and was fully manageable using AWS Systems Manager Session Manager.
+
+</div>
+
+<hr>
+
+<h2>Next Lab</h2>
+
+<p>
+
+Lab 24 – AWS CloudFormation
+
+</p>
+
+<p>
+
+Learn how to describe and deploy AWS infrastructure using Infrastructure as Code (IaC).
+
+</p>
+
+</body>
+</html>
