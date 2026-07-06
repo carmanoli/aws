@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 22 - AWS Systems Manager Session Manager</title>
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    max-width:1000px;
+    margin:40px auto;
+    line-height:1.6;
+    color:#333;
+}
+h1,h2,h3{color:#1f4e79;}
+code{
+    background:#f4f4f4;
+    padding:2px 4px;
+}
+pre{
+    background:#f4f4f4;
+    padding:12px;
+    overflow-x:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:8px;
+}
+</style>
+</head>
+<body>
+
+<h1>Lab 22 – AWS Systems Manager Session Manager</h1>
+
+<h2>Objective</h2>
+
+<p>Access an Amazon EC2 instance securely without using SSH, SSH keys or opening TCP port 22 by using AWS Systems Manager Session Manager.</p>
+
+<h2>Learning Objectives</h2>
+
+<ul>
+<li>Understand how Session Manager works.</li>
+<li>Connect to an EC2 instance directly from the AWS Console.</li>
+<li>Understand the relationship between SSM Agent, IAM Roles and Systems Manager.</li>
+<li>Replace traditional SSH administration with Session Manager.</li>
+<li>Reduce the attack surface by removing inbound SSH access.</li>
+</ul>
+
+<h2>Existing Infrastructure</h2>
+
+<ul>
+<li>EC2 instance: lab-web-server</li>
+<li>Launch Template: lab-web-template</li>
+<li>Security Group: lab-ec2-web-sg</li>
+<li>Application Load Balancer</li>
+<li>AWS Systems Manager</li>
+<li>IAM Role: lab-ec2-ssm-role</li>
+<li>CloudTrail</li>
+</ul>
+
+<h2>Architecture</h2>
+
+<pre>
+Administrator
+      │
+      ▼
+AWS Systems Manager
+      │
+ HTTPS (443)
+      │
+amazon-ssm-agent
+      │
+EC2 Instance
+</pre>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>EC2 instance running.</li>
+<li>Amazon SSM Agent installed.</li>
+<li>IAM Role attached to the instance.</li>
+<li>AmazonSSMManagedInstanceCore policy attached.</li>
+<li>Network connectivity to Systems Manager endpoints.</li>
+</ul>
+
+<h2>Verify Managed Node</h2>
+
+<ol>
+<li>Open AWS Systems Manager.</li>
+<li>Open Fleet Manager.</li>
+<li>Verify that the instance appears as a Managed Node.</li>
+</ol>
+
+<h2>Open a Session</h2>
+
+<ol>
+<li>Open EC2 Console.</li>
+<li>Select the instance.</li>
+<li>Choose Connect.</li>
+<li>Select the Session Manager tab.</li>
+<li>Click Connect.</li>
+</ol>
+
+<p>A browser terminal should open without requiring an SSH client or key pair.</p>
+
+<h2>Verify the Session</h2>
+
+<pre>
+whoami
+hostname
+pwd
+</pre>
+
+<p>Expected user:</p>
+
+<pre>
+ssm-user
+</pre>
+
+<h2>Understand the ssm-user Account</h2>
+
+<pre>
+id
+sudo whoami
+</pre>
+
+<p>The Session Manager creates or uses the dedicated <code>ssm-user</code> account. Administrative commands are executed through <code>sudo</code>, following Linux best practices instead of logging in directly as root.</p>
+
+<h2>Verify the SSM Agent</h2>
+
+<p>Check whether the agent is running:</p>
+
+<pre>
+sudo systemctl status amazon-ssm-agent
+</pre>
+
+<p>Or simply verify its state:</p>
+
+<pre>
+sudo systemctl is-active amazon-ssm-agent
+</pre>
+
+<h2>Install the SSM Agent (if required)</h2>
+
+<p>Amazon Linux 2 and Amazon Linux 2023 normally include the agent by default.</p>
+
+<pre>
+sudo dnf install amazon-ssm-agent
+sudo systemctl enable amazon-ssm-agent
+sudo systemctl start amazon-ssm-agent
+</pre>
+
+<h2>Verify the IAM Role</h2>
+
+<p>Open the EC2 instance details and verify that the attached IAM Role is:</p>
+
+<pre>
+lab-ec2-ssm-role
+</pre>
+
+<p>The role must include the managed policy:</p>
+
+<pre>
+AmazonSSMManagedInstanceCore
+</pre>
+
+<h2>Compare SSH and Session Manager</h2>
+
+<table>
+<tr>
+<th>SSH</th>
+<th>Session Manager</th>
+</tr>
+<tr>
+<td>TCP Port 22</td>
+<td>HTTPS (443)</td>
+</tr>
+<tr>
+<td>SSH Key Pair</td>
+<td>IAM Authentication</td>
+</tr>
+<tr>
+<td>SSH Client Required</td>
+<td>AWS Console or AWS CLI</td>
+</tr>
+<tr>
+<td>Internet Exposure</td>
+<td>No Management Ports Exposed</td>
+</tr>
+<tr>
+<td>ec2-user</td>
+<td>ssm-user</td>
+</tr>
+</table>
+
+<h2>Remove SSH Access</h2>
+
+<p>Edit the EC2 Security Group and remove the inbound TCP port 22 rule.</p>
+
+<h2>Validation</h2>
+
+<p>SSH test:</p>
+
+<pre>
+ssh -i "EC2-FIRST-KEY.pem" ec2-user@PUBLIC-IP
+</pre>
+
+<p>Expected result:</p>
+
+<pre>
+Connection timed out
+</pre>
+
+<p>Session Manager test:</p>
+
+<pre>
+echo "Session Manager is still working"
+
+sudo systemctl status httpd --no-pager
+</pre>
+
+<p>The commands should execute successfully even though SSH is no longer available.</p>
+
+<h2>Key Takeaways</h2>
+
+<ul>
+<li>Session Manager provides secure remote administration without SSH.</li>
+<li>No inbound management ports are required.</li>
+<li>Authentication is controlled through IAM.</li>
+<li>Administrative access can be audited through CloudTrail.</li>
+<li>The attack surface is significantly reduced.</li>
+</ul>
+
+<h2>Troubleshooting</h2>
+
+<table>
+<tr>
+<th>Problem</th>
+<th>Possible Cause</th>
+</tr>
+<tr>
+<td>Instance not listed as Managed Node</td>
+<td>Missing IAM Role or SSM Agent</td>
+</tr>
+<tr>
+<td>Cannot start a session</td>
+<td>SSM Agent stopped or no network connectivity</td>
+</tr>
+<tr>
+<td>SSH still works</td>
+<td>Port 22 still allowed in the Security Group</td>
+</tr>
+<tr>
+<td>Session Manager unavailable</td>
+<td>Verify IAM Role, SSM Agent and network connectivity</td>
+</tr>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>This lab demonstrated how AWS Systems Manager Session Manager can completely replace traditional SSH administration while improving security, simplifying key management and reducing the exposed attack surface of Amazon EC2 instances.</p>
+
+</body>
+</html>
