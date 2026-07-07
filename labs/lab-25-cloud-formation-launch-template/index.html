@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 25 - CloudFormation with Launch Template</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 40px;
+      color: #222;
+      background-color: #fff;
+    }
+    h1, h2, h3 {
+      color: #1f2933;
+    }
+    code, pre {
+      background-color: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    code {
+      padding: 2px 4px;
+    }
+    pre {
+      padding: 12px;
+      overflow-x: auto;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    .note {
+      border-left: 4px solid #666;
+      padding: 10px 15px;
+      background-color: #f7f7f7;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Lab 25 - CloudFormation with Launch Template</h1>
+
+<h2>1. Lab Objective</h2>
+<p>
+The objective of this lab was to extend the previous CloudFormation fundamentals lab by creating an Amazon EC2 instance through AWS CloudFormation while reusing an existing EC2 Launch Template.
+</p>
+<p>
+Instead of defining the full EC2 configuration directly inside the CloudFormation template, the stack reused the existing Launch Template named <code>launch-web-template</code>. This approach avoids duplicating configuration such as AMI selection, User Data, IAM role configuration, Apache installation, Git deployment logic and other instance bootstrap settings.
+</p>
+
+<h2>2. Services Used</h2>
+<ul>
+  <li>AWS CloudFormation</li>
+  <li>Amazon EC2</li>
+  <li>EC2 Launch Templates</li>
+  <li>Application Load Balancer</li>
+  <li>Target Group</li>
+  <li>Security Groups</li>
+  <li>AWS Systems Manager Session Manager</li>
+  <li>Apache HTTP Server</li>
+  <li>Git / GitHub deployment through User Data</li>
+</ul>
+
+<h2>3. Existing Resources Reused</h2>
+<table>
+  <tr>
+    <th>Resource</th>
+    <th>Name</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>Launch Template</td>
+    <td><code>launch-web-template</code></td>
+    <td>Provides the EC2 base configuration and website deployment automation.</td>
+  </tr>
+  <tr>
+    <td>Application Load Balancer</td>
+    <td><code>lab-web-alb</code></td>
+    <td>Receives HTTP traffic from the internet.</td>
+  </tr>
+  <tr>
+    <td>Target Group</td>
+    <td><code>lab-web-tg</code></td>
+    <td>Routes traffic from the ALB to healthy EC2 instances.</td>
+  </tr>
+  <tr>
+    <td>ALB Security Group</td>
+    <td><code>lab-alb-sg</code></td>
+    <td>Allows inbound HTTP traffic from the internet.</td>
+  </tr>
+  <tr>
+    <td>EC2 Security Group</td>
+    <td><code>lab-ec2-web-sg</code></td>
+    <td>Allows HTTP traffic only from the ALB Security Group.</td>
+  </tr>
+  <tr>
+    <td>IAM Role</td>
+    <td><code>lab-ec2-ssm-role</code></td>
+    <td>Allows EC2 administration through AWS Systems Manager Session Manager.</td>
+  </tr>
+</table>
+
+<h2>4. Architecture</h2>
+<pre>
+Internet
+   |
+   v
+Application Load Balancer (lab-web-alb)
+   |
+   v
+Target Group (lab-web-tg)
+   |
+   +-----------------------------+
+   |                             |
+   v                             v
+EC2 from Auto Scaling Group      EC2 created by CloudFormation
+Original instance                lab-cfn-launch-template-ec2
+</pre>
+
+<p>
+The CloudFormation-created EC2 instance was manually registered in the existing Target Group to verify that it could serve traffic through the existing Application Load Balancer.
+</p>
+
+<h2>5. Important Concept</h2>
+<p>
+CloudFormation only creates and configures the resources explicitly declared in the template. In this lab, the template created an EC2 instance and a Security Group, but it did not automatically register the instance in the existing Target Group because that association was not defined in the template.
+</p>
+<p>
+This distinction is important in Infrastructure as Code. AWS resources are not implicitly connected just because they exist in the same environment. Relationships between services must be declared explicitly.
+</p>
+
+<h2>6. CloudFormation Template</h2>
+<p>
+The previous Lab 24 template was adapted so that the EC2 instance used the existing Launch Template.
+</p>
+
+<pre><code>AWSTemplateFormatVersion: '2010-09-09'
+
+Description: &gt;
+  Lab 25 - CloudFormation with Launch Template.
+  Creates an EC2 instance using an existing Launch Template.
+
+Parameters:
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing VPC ID
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Existing subnet for the EC2 instance
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value&lt;AWS::EC2::Image::Id&gt;
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 AMI ID from AWS Systems Manager Parameter Store
+
+Resources:
+
+  LabSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created by CloudFormation
+      GroupName: lab-cfn-web-sg
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  LabEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: launch-web-template
+        Version: "2"
+      SubnetId: !Ref SubnetId
+      Tags:
+        - Key: Name
+          Value: lab-cfn-launch-template-ec2
+        - Key: Lab
+          Value: Lab25
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+
+  SecurityGroupId:
+    Description: Security Group created by the stack
+    Value: !Ref LabSecurityGroup
+
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref LabEC2Instance
+</code></pre>
+
+<div class="note">
+<p>
+Note: The template still includes the <code>LatestAmiId</code> parameter from the previous lab, although the EC2 instance is now using the AMI defined in the Launch Template. In a later cleanup version, this parameter can be removed if it is no longer needed.
+</p>
+</div>
+
+<h2>7. Issue Encountered</h2>
+<p>
+The first version of the updated template used the following syntax:
+</p>
+
+<pre><code>LaunchTemplate:
+  LaunchTemplateName: launch-web-template
+  Version: $Latest
+</code></pre>
+
+<p>
+CloudFormation returned the following error:
+</p>
+
+<pre><code>CloudFormation does not support using $Latest or $Default for LaunchTemplate version.
+Please specify a version number or name.</code></pre>
+
+<h2>8. Resolution</h2>
+<p>
+The Launch Template version was checked in the EC2 console under:
+</p>
+
+<pre><code>EC2 &gt; Launch Templates &gt; launch-web-template &gt; Versions</code></pre>
+
+<p>
+The active version was identified as version <code>2</code>. The CloudFormation template was then updated to use an explicit version number:
+</p>
+
+<pre><code>LaunchTemplate:
+  LaunchTemplateName: launch-web-template
+  Version: "2"</code></pre>
+
+<p>
+After deleting the failed stack in <code>ROLLBACK_COMPLETE</code> state, the stack was created again successfully.
+</p>
+
+<h2>9. Stack Creation</h2>
+<p>
+The stack was created with the following name:
+</p>
+
+<pre><code>lab25-cfn-launch-template</code></pre>
+
+<p>
+Parameters selected during stack creation:
+</p>
+
+<ul>
+  <li><code>VpcId</code>: default VPC</li>
+  <li><code>SubnetId</code>: public subnet in the same VPC</li>
+</ul>
+
+<p>
+The final stack status was:</p>
+
+<pre><code>CREATE_COMPLETE</code></pre>
+
+<h2>10. Target Group Registration</h2>
+<p>
+After the stack was created, the new EC2 instance was manually registered in the existing Target Group:
+</p>
+
+<pre><code>EC2 &gt; Target Groups &gt; lab-web-tg &gt; Targets &gt; Register targets</code></pre>
+
+<p>
+The new CloudFormation-created EC2 instance was selected and registered on port <code>80</code>. After a short wait, the target became <code>Healthy</code>.
+</p>
+
+<h2>11. Access Model</h2>
+<p>
+The EC2 instance was not accessed directly through its public IP address. This was expected because the security model is designed so that the EC2 instances only accept HTTP traffic from the Application Load Balancer.
+</p>
+
+<pre>
+Internet
+   |
+   v
+ALB Security Group
+   |
+   v
+Application Load Balancer
+   |
+   v
+Target Group
+   |
+   v
+EC2 Security Group
+   |
+   v
+EC2 Instance
+</pre>
+
+<p>
+This is a recommended architecture because the EC2 instances are not directly exposed to the internet. Public traffic enters through the ALB, and the ALB forwards requests only to healthy registered targets.
+</p>
+
+<h2>12. Validation Through Session Manager</h2>
+<p>
+The new EC2 instance was accessed using AWS Systems Manager Session Manager, because SSH remains disabled in this environment.
+</p>
+
+<p>The following commands were executed:</p>
+
+<pre><code>hostname</code></pre>
+
+<p>Example output:</p>
+
+<pre><code>ip-172-31-19-121.eu-north-1.compute.internal</code></pre>
+
+<p>The web server was then tested locally:</p>
+
+<pre><code>curl localhost</code></pre>
+
+<p>The command returned the HTML content of the website, confirming that Apache was running and that the website deployment from the Launch Template User Data had completed successfully.</p>
+
+<h2>13. Load Balancing Validation</h2>
+<p>
+To confirm that the Application Load Balancer was distributing traffic between the original EC2 instance and the CloudFormation-created EC2 instance, the website content was temporarily modified only on the CloudFormation-created instance.
+</p>
+
+<p>The website directory was checked:</p>
+
+<pre><code>ls /var/www/html</code></pre>
+
+<p>The main HTML file was edited:</p>
+
+<pre><code>sudo nano /var/www/html/index.html</code></pre>
+
+<p>A temporary visible marker was added:</p>
+
+<pre><code>&lt;h1&gt;CloudFormation Instance&lt;/h1&gt;</code></pre>
+
+<p>
+After refreshing the ALB DNS name in the browser several times, the page alternated between the original website and the modified page. This confirmed that the ALB was serving traffic from both instances.
+</p>
+
+<h2>14. Technical Conclusions</h2>
+<ul>
+  <li>CloudFormation can create EC2 instances using existing Launch Templates.</li>
+  <li>When using a Launch Template in CloudFormation, the template version must be explicit.</li>
+  <li><code>$Latest</code> and <code>$Default</code> are not accepted in this CloudFormation EC2 Launch Template configuration.</li>
+  <li>CloudFormation only creates the relationships declared in the template.</li>
+  <li>Registering an EC2 instance in a Target Group must be done explicitly, either manually or through the template.</li>
+  <li>Accessing EC2 instances through the ALB instead of directly through public IP addresses is a better security practice.</li>
+  <li>Session Manager allows administration without SSH access.</li>
+  <li>The Launch Template successfully reused the existing Apache and GitHub deployment automation.</li>
+</ul>
+
+<h2>15. Enterprise Relevance</h2>
+<p>
+This lab demonstrates the transition from manual resource creation to Infrastructure as Code. In a real enterprise environment, creating standalone EC2 instances for web workloads is less common than creating Auto Scaling Groups linked to Target Groups and Load Balancers.
+</p>
+<p>
+However, this lab was important because it showed how CloudFormation can reuse an existing Launch Template and how explicit resource relationships are required when building infrastructure as code.
+</p>
+
+<h2>16. Cost Considerations</h2>
+<p>
+The lab used a small EC2 instance compatible with the Free Tier where available. However, because an additional EC2 instance was created, it is important to stop or delete unnecessary test resources after the lab if they are no longer needed.
+</p>
+<p>
+The Application Load Balancer may generate costs depending on account credits and Free Tier conditions. Existing resources should be reused carefully and cleaned up when not needed.
+</p>
+
+<h2>17. Recommended Cleanup</h2>
+<p>
+If this CloudFormation-created EC2 instance is no longer required, delete the CloudFormation stack:
+</p>
+
+<pre><code>CloudFormation &gt; lab25-cfn-launch-template &gt; Delete</code></pre>
+
+<p>
+Before deletion, the instance can also be deregistered from the Target Group if required:
+</p>
+
+<pre><code>EC2 &gt; Target Groups &gt; lab-web-tg &gt; Targets &gt; Deregister</code></pre>
+
+<p>
+If the stack is deleted, the EC2 instance and the Security Group created by the stack are removed automatically, unless another resource dependency prevents deletion.
+</p>
+
+<h2>18. Next Lab</h2>
+<p>
+The next lab will build on this work by creating an Auto Scaling Group with CloudFormation and associating it with the existing Target Group. This will remove the need to manually register EC2 instances and will move the architecture closer to a production-style deployment.
+</p>
+
+<pre>
+CloudFormation
+   |
+   +-- Auto Scaling Group
+          |
+          +-- EC2 instances
+          |
+          +-- Automatic Target Group registration
+</pre>
+
+<h2>19. Lab Summary</h2>
+<p>
+In this lab, an EC2 instance was created with CloudFormation using an existing Launch Template. The stack was successfully created after correcting the Launch Template version from <code>$Latest</code> to an explicit version number. The instance was manually added to the existing Target Group and validated through the Application Load Balancer. Session Manager was used for administration, maintaining the no-SSH security model already adopted in previous labs.
+</p>
+
+</body>
+</html>

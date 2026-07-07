@@ -1,0 +1,150 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 24 - AWS CloudFormation (Introduction)</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1000px;margin:auto;line-height:1.6;padding:30px}
+code,pre{background:#f4f4f4;padding:2px 4px}
+pre{padding:12px;overflow:auto}
+h1,h2,h3{color:#1f4e79}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px}
+th{background:#eee}
+</style>
+</head>
+<body>
+
+<h1>Lab 24 – AWS CloudFormation (Introduction)</h1>
+
+<h2>Objective</h2>
+<p>Learn the fundamentals of Infrastructure as Code (IaC) using AWS CloudFormation by creating,
+updating and deleting a CloudFormation Stack.</p>
+
+<h2>Prerequisites</h2>
+<ul>
+<li>Existing AWS account.</li>
+<li>Default VPC available.</li>
+<li>One existing subnet.</li>
+<li>CloudFormation service enabled.</li>
+</ul>
+
+<h2>Concepts Covered</h2>
+<ul>
+<li>Infrastructure as Code (IaC)</li>
+<li>CloudFormation Templates</li>
+<li>Stacks</li>
+<li>Parameters</li>
+<li>Resources</li>
+<li>Outputs</li>
+<li>Stack Updates</li>
+<li>Change Sets</li>
+<li>Drift Detection</li>
+<li>Stack Deletion</li>
+</ul>
+
+<h2>Template Structure</h2>
+
+<pre>
+AWSTemplateFormatVersion
+Description
+Parameters
+Resources
+Outputs
+</pre>
+
+<h2>Template Used</h2>
+
+<pre>
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Lab 24 - CloudFormation Introduction
+
+Parameters:
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value&lt;AWS::EC2::Image::Id&gt;
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+
+  LabSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created by CloudFormation
+      GroupName: lab-cfn-web-sg
+      VpcId: !Ref VpcId
+
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  LabEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.micro
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref LabSecurityGroup
+      Tags:
+        - Key: Name
+          Value: lab-cfn-ec2
+
+Outputs:
+
+  SecurityGroupId:
+    Value: !Ref LabSecurityGroup
+
+  InstanceId:
+    Value: !Ref LabEC2Instance
+</pre>
+
+<h2>Procedure</h2>
+<ol>
+<li>Create a new CloudFormation Stack.</li>
+<li>Upload the YAML template.</li>
+<li>Provide VPC and Subnet parameters.</li>
+<li>Create the Stack.</li>
+<li>Review Resources, Parameters and Outputs.</li>
+<li>Modify the template by adding an HTTP ingress rule.</li>
+<li>Create and review a Change Set.</li>
+<li>Execute the Change Set.</li>
+<li>Run Drift Detection and verify the stack is <b>IN_SYNC</b>.</li>
+<li>Update the Stack to add an EC2 instance.</li>
+<li>Verify the new EC2 instance was created.</li>
+<li>Delete the Stack and verify that both the EC2 instance and Security Group are automatically removed.</li>
+</ol>
+
+<h2>Troubleshooting Performed</h2>
+<ul>
+<li>Launch Template update failed because an incorrect Launch Template name was used.</li>
+<li>The laboratory was simplified to keep the focus on CloudFormation fundamentals.</li>
+<li>Rollback behavior and CloudFormation Events were used to identify the failure.</li>
+</ul>
+
+<h2>Key Learning Points</h2>
+<ul>
+<li>CloudFormation manages infrastructure declaratively.</li>
+<li>Parameters make templates reusable.</li>
+<li>Outputs expose useful resource identifiers.</li>
+<li>Change Sets allow reviewing changes before execution.</li>
+<li>Drift Detection identifies manual configuration changes.</li>
+<li>Deleting a Stack automatically removes managed resources in the correct dependency order.</li>
+</ul>
+
+<h2>Result</h2>
+<p>The laboratory successfully demonstrated the complete CloudFormation lifecycle:
+Create → Update → Drift Detection → Delete.</p>
+
+</body>
+</html>
