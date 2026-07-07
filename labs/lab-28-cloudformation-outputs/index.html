@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 28 - AWS CloudFormation Outputs</title>
+
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    line-height:1.6;
+    max-width:1100px;
+    margin:auto;
+    padding:40px;
+    color:#333;
+}
+h1,h2,h3{
+    color:#1f4e79;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow-x:auto;
+    border-left:4px solid #1f4e79;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin:20px 0;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+.note{
+    background:#eef7ff;
+    border-left:5px solid #1f4e79;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>Lab 28 – AWS CloudFormation Outputs</h1>
+
+<h2>Objective</h2>
+
+<p>
+The purpose of this lab was to extend the existing CloudFormation stack by introducing the
+<strong>Outputs</strong> section.
+Outputs provide an easy way to expose useful information about a stack after deployment and
+prepare it for integration with other CloudFormation stacks.
+</p>
+
+<hr>
+
+<h2>Existing Infrastructure</h2>
+
+<ul>
+<li>CloudFormation Stack</li>
+<li>EC2 Auto Scaling Group</li>
+<li>Launch Template</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Security Groups</li>
+<li>Systems Manager Session Manager</li>
+<li>CloudWatch</li>
+<li>SNS</li>
+<li>Lambda</li>
+<li>EventBridge</li>
+<li>CloudTrail</li>
+<li>Parameter Store</li>
+</ul>
+
+<p>
+No additional AWS resources were created during this lab.
+Only the CloudFormation template was enhanced.
+</p>
+
+<hr>
+
+<h2>Understanding CloudFormation Sections</h2>
+
+<table>
+<tr>
+<th>Section</th>
+<th>Purpose</th>
+</tr>
+
+<tr>
+<td>Parameters</td>
+<td>Receive values supplied by the user during stack creation or update.</td>
+</tr>
+
+<tr>
+<td>Resources</td>
+<td>Create and manage AWS infrastructure.</td>
+</tr>
+
+<tr>
+<td>Outputs</td>
+<td>Publish useful information after the stack has been deployed.</td>
+</tr>
+
+</table>
+
+<p>The logical flow is:</p>
+
+<pre>
+Parameters
+      │
+      ▼
+Resources
+      │
+      ▼
+Outputs
+</pre>
+
+<hr>
+
+<h2>Outputs Added</h2>
+
+<p>The following Outputs were added to the existing stack.</p>
+
+<pre>
+Outputs:
+
+  StackName:
+    Description: CloudFormation Stack Name
+    Value: !Ref AWS::StackName
+
+  AutoScalingGroupName:
+    Description: Auto Scaling Group Name
+    Value: !Ref LabWebAutoScalingGroup
+    Export:
+      Name: lab-asg-name
+
+  AutoScalingGroupARN:
+    Description: Auto Scaling Group ARN
+    Value: !GetAtt LabWebAutoScalingGroup.AutoScalingGroupARN
+    Export:
+      Name: lab-asg-arn
+
+  LaunchTemplateName:
+    Description: Launch Template Name
+    Value: launch-web-template
+
+  TargetGroupARN:
+    Description: Target Group ARN
+    Value: arn:aws:elasticloadbalancing:eu-north-1:xxxxxxxxxxxx:targetgroup/lab-web-tg/xxxxxxxx
+</pre>
+
+<hr>
+
+<h2>Intrinsic Functions Used</h2>
+
+<h3>!Ref</h3>
+
+<p>
+The <code>!Ref</code> intrinsic function returns the logical value of a CloudFormation resource.
+</p>
+
+Example:
+
+<pre>
+Value: !Ref LabWebAutoScalingGroup
+</pre>
+
+<hr>
+
+<h3>!GetAtt</h3>
+
+<p>
+The <code>!GetAtt</code> intrinsic function retrieves a specific attribute from a CloudFormation resource.
+</p>
+
+Example:
+
+<pre>
+Value: !GetAtt LabWebAutoScalingGroup.AutoScalingGroupARN
+</pre>
+
+<hr>
+
+<h2>Exporting Outputs</h2>
+
+<p>
+CloudFormation allows Outputs to be exported so that other stacks can reuse them.
+</p>
+
+Example:
+
+<pre>
+AutoScalingGroupName:
+  Value: !Ref LabWebAutoScalingGroup
+  Export:
+    Name: lab-asg-name
+</pre>
+
+<p>
+This makes the value available to any other CloudFormation stack inside the same AWS Region.
+</p>
+
+<hr>
+
+<h2>Viewing Outputs</h2>
+
+<p>
+Outputs can be viewed by navigating to:
+</p>
+
+<pre>
+CloudFormation
+    ↓
+Select Stack
+    ↓
+Outputs
+</pre>
+
+Typical results:
+
+<table>
+<tr>
+<th>Output</th>
+<th>Example</th>
+</tr>
+
+<tr>
+<td>StackName</td>
+<td>lab26-asg-stack</td>
+</tr>
+
+<tr>
+<td>AutoScalingGroupName</td>
+<td>lab-cfn-web-asg</td>
+</tr>
+
+<tr>
+<td>AutoScalingGroupARN</td>
+<td>arn:aws:autoscaling:...</td>
+</tr>
+
+<tr>
+<td>LaunchTemplateName</td>
+<td>launch-web-template</td>
+</tr>
+
+<tr>
+<td>TargetGroupARN</td>
+<td>arn:aws:elasticloadbalancing:...</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Viewing Exports</h2>
+
+<p>
+Exported Outputs can be viewed from:
+</p>
+
+<pre>
+CloudFormation
+    ↓
+Exports
+</pre>
+
+Typical results:
+
+<table>
+<tr>
+<th>Export Name</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>lab-asg-name</td>
+<td>lab-cfn-web-asg</td>
+</tr>
+
+<tr>
+<td>lab-asg-arn</td>
+<td>arn:aws:autoscaling:...</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Preparing for Cross-Stack References</h2>
+
+<p>
+Although no second stack was created during this lab, exporting Outputs prepares the infrastructure
+for CloudFormation Cross-Stack References.
+</p>
+
+Architecture:
+
+<pre>
+CloudFormation Stack A
+│
+├── Resources
+├── Outputs
+└── Exports
+        │
+        ▼
+CloudFormation Stack B
+        │
+        ▼
+Fn::ImportValue
+</pre>
+
+This enables infrastructure to be divided into independent reusable stacks.
+
+<hr>
+
+<h2>Benefits</h2>
+
+<ul>
+<li>Improves infrastructure documentation.</li>
+<li>Publishes useful deployment information.</li>
+<li>Enables resource sharing between CloudFormation stacks.</li>
+<li>Supports modular infrastructure design.</li>
+<li>Prepares for Nested Stacks and enterprise Infrastructure as Code practices.</li>
+</ul>
+
+<hr>
+
+<h2>AWS Services Used</h2>
+
+<ul>
+<li>AWS CloudFormation</li>
+<li>Amazon EC2 Auto Scaling</li>
+<li>Application Load Balancer</li>
+</ul>
+
+<hr>
+
+<h2>Skills Learned</h2>
+
+<ul>
+<li>Create CloudFormation Outputs.</li>
+<li>Use <code>!Ref</code>.</li>
+<li>Use <code>!GetAtt</code>.</li>
+<li>Export CloudFormation Outputs.</li>
+<li>View Outputs and Exports.</li>
+<li>Prepare stacks for Cross-Stack References.</li>
+</ul>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+In this lab the existing CloudFormation stack was enhanced without creating additional infrastructure.
+Outputs were introduced to expose useful stack information, and selected values were exported for future reuse.
+These concepts are fundamental for building modular CloudFormation architectures and provide the foundation for Cross-Stack References, which will be implemented in the next lab.
+</p>
+
+</body>
+</html>

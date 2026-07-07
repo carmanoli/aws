@@ -4,3 +4,13 @@
 
 <h3>CloudFormation Drift Detection:</h3>
 How to detect when the actual state of resources in your AWS environment deviates from the expected state defined in your CloudFormation template? The answer involves using the <b>Drift Detection</b> feature to compare the current state with the expected state and identify any discrepancies.
+
+
+<h3>Faltam-te exatamente duas tarefas para resgatar os últimos $40 disponíveis:</h3>
+Criar uma base de dados no Amazon RDS ($20)O que fazer: Aceder ao serviço Amazon RDS na consola.Ação: Seguir o assistente para criar uma base de dados simples (escolhe o motor MySQL ou PostgreSQL e certifica-te de que marcas a opção "Free tier" nas configurações para não gerar custos).Bónus: Assim que a base de dados for provisionada com sucesso, ganhas mais $20. Podes apagá-la (delete) logo a seguir para garantir segurança.2. Usar o Amazon Bedrock Playground ($20)O que fazer: Procurar por Amazon Bedrock na barra de pesquisa da consola AWS.Ação: No menu lateral esquerdo, aceder a Playgrounds (podes escolher a secção de Text ou Chat). Escolhe um dos modelos de Inteligência Artificial disponíveis (como os modelos da Anthropic Claude ou Amazon Titan) e faz uma pergunta ou interação simples na caixa de texto.Bónus: Esta interação rápida ativa o último gatilho de recompensa de $20 na tua conta.
+
+ <h3>Boas Práticas AWS CDK / IaC:</h3> 
+ Acoplamento entre StacksO Problema (Anti-padrão):Criar dependências diretas entre Stacks diferentes (usando referências cruzadas ou Export / Fn::ImportValue). Se alterares ou tentares eliminar uma Stack que fornece um dado (output) para outra, a AWS bloqueia a atualização. Isto gera um bloqueio circular difícil de resolver (exige múltiplos deploys de "limpeza").A Solução (Boa Prática):Manter as Stacks 100% independentes e desacopladas. Para passar variáveis ou dados de configuração de uma Stack para outra, deve usar-se um intermediário.Como implementar:Stack A (Origem): Guarda o valor gerado (ex: o ID de uma rede ou base de dados) no AWS Systems Manager (SSM) Parameter Store.Stack B (Destino): Lê o valor diretamente do caminho do Parameter Store no momento do deploy.Resultado:As Stacks tornam-se autónomas. Podes atualizar, destruir ou recriar a Stack de origem sem o risco de corromper ou bloquear a Stack de destino.
+
+<h3>Nested Stacks</h3>
+ Se a tua infraestrutura faz toda parte do mesmo projeto e queres fazer o deploy de tudo com um único comando, as Nested Stacks são a melhor alternativa para organizar o código. Se os projetos forem independentes, continua a usar o Parameter Store.

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AWS Lab 29 - CloudFormation Cross-Stack References</title>
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    max-width:1100px;
+    margin:auto;
+    line-height:1.6;
+    padding:30px;
+    color:#222;
+}
+h1,h2,h3{
+    color:#0F4C81;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+    border-left:4px solid #0F4C81;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:8px;
+    text-align:left;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Lab 29 - AWS CloudFormation Cross-Stack References</h1>
+
+<h2>Objective</h2>
+
+<p>
+Learn how multiple CloudFormation stacks can share information by using
+<strong>CloudFormation Exports</strong> together with
+<strong>Fn::ImportValue</strong>.
+</p>
+
+<p>
+This lab demonstrates how independent stacks can communicate while remaining
+loosely coupled, a common design pattern used in enterprise AWS environments.
+</p>
+
+<hr>
+
+<h2>Architecture Before the Lab</h2>
+
+<ul>
+<li>Main infrastructure managed by <strong>lab26-asg-stack</strong>.</li>
+<li>Auto Scaling Group exported through CloudFormation Outputs.</li>
+<li>Exports available:
+<ul>
+<li>lab-asg-name</li>
+<li>lab-asg-arn</li>
+</ul>
+</li>
+</ul>
+
+<hr>
+
+<h2>New Concepts</h2>
+
+<ul>
+<li>CloudFormation Cross-Stack References</li>
+<li>CloudFormation Export</li>
+<li>Fn::ImportValue</li>
+<li>Independent CloudFormation Stacks</li>
+<li>Stack Dependencies</li>
+</ul>
+
+<hr>
+
+<h2>Consumer Stack</h2>
+
+<p>A second CloudFormation stack was created:</p>
+
+<pre>
+lab29-cross-stack-consumer
+</pre>
+
+<p>
+Instead of creating infrastructure, this stack imported values exported by the
+main infrastructure stack.
+</p>
+
+<hr>
+
+<h2>Template Highlights</h2>
+
+<pre>
+Fn::ImportValue: lab-asg-name
+
+Fn::ImportValue: lab-asg-arn
+</pre>
+
+<p>
+These intrinsic functions imported values directly from another CloudFormation
+stack.
+</p>
+
+<hr>
+
+<h2>Resources Created</h2>
+
+<table>
+<tr>
+<th>Resource</th>
+<th>Purpose</th>
+</tr>
+
+<tr>
+<td>SSM Parameter</td>
+<td>Stored imported Auto Scaling Group Name</td>
+</tr>
+
+<tr>
+<td>SSM Parameter</td>
+<td>Stored imported Auto Scaling Group ARN</td>
+</tr>
+
+<tr>
+<td>Outputs</td>
+<td>Displayed imported values</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Validation</h2>
+
+<p>The following checks were successfully completed:</p>
+
+<ul>
+
+<li>Consumer stack created successfully.</li>
+
+<li>Outputs displayed imported values.</li>
+
+<li>Parameter Store contained imported values.</li>
+
+<li>Imported values matched the exports from the original stack.</li>
+
+<li>No duplicate infrastructure was created.</li>
+
+</ul>
+
+<hr>
+
+<h2>CloudFormation Dependency Model</h2>
+
+<p>
+After importing exported values, CloudFormation automatically establishes a
+dependency between both stacks.
+</p>
+
+<p>
+While the consumer stack exists:
+</p>
+
+<ul>
+
+<li>Exports cannot be removed.</li>
+
+<li>Export names cannot be changed.</li>
+
+<li>The exporting stack is protected from breaking dependent stacks.</li>
+
+</ul>
+
+<p>
+This automatic protection prevents accidental infrastructure failures.
+</p>
+
+<hr>
+
+<h2>Enterprise Architecture</h2>
+
+<p>
+Cross-stack references are commonly used to separate infrastructure into
+independent logical layers.
+</p>
+
+<table>
+
+<tr>
+<th>Stack</th>
+<th>Typical Resources</th>
+</tr>
+
+<tr>
+<td>Networking</td>
+<td>VPC, Subnets, Route Tables, Internet Gateway, NAT Gateway</td>
+</tr>
+
+<tr>
+<td>Security</td>
+<td>IAM Roles, Security Groups, KMS Keys</td>
+</tr>
+
+<tr>
+<td>Compute</td>
+<td>Launch Templates, Auto Scaling Groups, EC2 Instances</td>
+</tr>
+
+<tr>
+<td>Application</td>
+<td>Load Balancers, Target Groups</td>
+</tr>
+
+<tr>
+<td>Monitoring</td>
+<td>CloudWatch, SNS, Dashboards, Alarms</td>
+</tr>
+
+</table>
+
+<p>
+Each stack exports only the values that other stacks need, reducing coupling
+and simplifying maintenance.
+</p>
+
+<hr>
+
+<h2>Advantages</h2>
+
+<ul>
+
+<li>Infrastructure reuse.</li>
+
+<li>Independent deployments.</li>
+
+<li>Clear separation of responsibilities.</li>
+
+<li>Reduced template complexity.</li>
+
+<li>Easier maintenance.</li>
+
+<li>Improved scalability.</li>
+
+<li>Safer infrastructure updates.</li>
+
+</ul>
+
+<hr>
+
+<h2>Cleanup</h2>
+
+<p>
+Since this stack existed only for learning purposes, it was deleted after
+validation.
+</p>
+
+<p>
+Deleting the consumer stack automatically removed:
+</p>
+
+<ul>
+
+<li>/lab/imported/asg-name</li>
+
+<li>/lab/imported/asg-arn</li>
+
+</ul>
+
+<p>
+The main infrastructure remained unchanged.
+</p>
+
+<hr>
+
+<h2>Skills Learned</h2>
+
+<ul>
+
+<li>Create CloudFormation Exports.</li>
+
+<li>Consume exported values.</li>
+
+<li>Use Fn::ImportValue.</li>
+
+<li>Understand cross-stack dependencies.</li>
+
+<li>Design modular CloudFormation architectures.</li>
+
+<li>Apply enterprise Infrastructure as Code practices.</li>
+
+</ul>
+
+<hr>
+
+<h2>Result</h2>
+
+<p>
+The infrastructure now includes practical experience with CloudFormation
+Cross-Stack References, an important feature for building modular AWS
+environments and an essential topic for the AWS Certified Solutions Architect –
+Associate (SAA-C03) certification.
+</p>
+
+</body>
+</html>
