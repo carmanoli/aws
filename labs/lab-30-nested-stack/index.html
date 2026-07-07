@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab 30 - CloudFormation Nested Stacks</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+      color: #222;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px;
+      background: #ffffff;
+    }
+    h1, h2, h3 {
+      color: #1f2937;
+    }
+    h1 {
+      border-bottom: 3px solid #232f3e;
+      padding-bottom: 10px;
+    }
+    h2 {
+      margin-top: 34px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 6px;
+    }
+    code {
+      background: #f3f4f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    pre {
+      background: #111827;
+      color: #f9fafb;
+      padding: 18px;
+      overflow-x: auto;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+    .note {
+      background: #eef6ff;
+      border-left: 5px solid #2563eb;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    .warning {
+      background: #fff7ed;
+      border-left: 5px solid #f97316;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    .success {
+      background: #ecfdf5;
+      border-left: 5px solid #10b981;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f4f6;
+    }
+    ul, ol {
+      margin-bottom: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Lab 30 - AWS CloudFormation Nested Stacks</h1>
+
+  <div class="note">
+    <strong>Learning path:</strong> AWS infrastructure learning path focused on practical cloud engineering skills and preparation for the AWS Solutions Architect Associate certification.
+  </div>
+
+  <h2>1. Lab Objective</h2>
+  <p>
+    The objective of this lab was to introduce <strong>AWS CloudFormation Nested Stacks</strong> and understand how they can be used to modularize infrastructure templates.
+  </p>
+
+  <p>In this lab, we created a parent CloudFormation stack that invoked a child template stored in Amazon S3. The child stack created a lightweight Systems Manager Parameter Store parameter.</p>
+
+  <h2>2. Concepts Covered</h2>
+  <ul>
+    <li>CloudFormation Nested Stacks</li>
+    <li>Parent stack and child stack relationship</li>
+    <li><code>AWS::CloudFormation::Stack</code> resource type</li>
+    <li>Template storage in Amazon S3</li>
+    <li>Passing parameters from a parent stack to a child stack</li>
+    <li>Retrieving outputs from a child stack</li>
+    <li>Updating a nested stack through a parent stack update</li>
+    <li>Difference between Nested Stacks and Cross-Stack References</li>
+    <li>Lab cleanup and cost control</li>
+  </ul>
+
+  <h2>3. Existing Infrastructure Context</h2>
+  <p>The lab was performed after completing the previous CloudFormation labs, where the following infrastructure was already available:</p>
+
+  <ul>
+    <li>CloudFormation Stack: <code>lab26-asg-stack</code></li>
+    <li>Launch Template: <code>launch-web-template</code> version 2</li>
+    <li>Auto Scaling Group: <code>lab-cfn-web-asg</code></li>
+    <li>Application Load Balancer: <code>lab-web-alb</code></li>
+    <li>Target Group: <code>lab-web-tg</code></li>
+    <li>Security Groups: <code>lab-ec2-web-sg</code> and <code>lab-alb-sg</code></li>
+    <li>IAM Role: <code>lab-ec2-ssm-role</code></li>
+    <li>Systems Manager Session Manager used for administration</li>
+    <li>SSH disabled</li>
+    <li>CloudFormation Outputs, Exports, and Cross-Stack References already studied</li>
+  </ul>
+
+  <h2>4. What Are Nested Stacks?</h2>
+  <p>
+    A Nested Stack is a CloudFormation stack created and managed by another CloudFormation stack. The main stack is called the <strong>parent stack</strong>, and the stack created by it is called the <strong>child stack</strong>.
+  </p>
+
+  <p>The parent stack uses the resource type:</p>
+
+  <pre><code>AWS::CloudFormation::Stack</code></pre>
+
+  <p>This allows a large infrastructure template to be divided into smaller, reusable templates.</p>
+
+  <h2>5. Nested Stacks vs Cross-Stack References</h2>
+
+  <table>
+    <tr>
+      <th>Feature</th>
+      <th>Cross-Stack References</th>
+      <th>Nested Stacks</th>
+    </tr>
+    <tr>
+      <td>Relationship</td>
+      <td>Independent stacks sharing values</td>
+      <td>Child stacks controlled by a parent stack</td>
+    </tr>
+    <tr>
+      <td>Main mechanism</td>
+      <td><code>Export</code> and <code>ImportValue</code></td>
+      <td><code>AWS::CloudFormation::Stack</code></td>
+    </tr>
+    <tr>
+      <td>Lifecycle</td>
+      <td>Stacks are managed independently</td>
+      <td>Child stack lifecycle is managed by the parent stack</td>
+    </tr>
+    <tr>
+      <td>Use case</td>
+      <td>Sharing values between separate stacks</td>
+      <td>Modularizing a large CloudFormation project</td>
+    </tr>
+  </table>
+
+  <h2>6. Architecture Used in This Lab</h2>
+
+  <pre><code>Parent Stack: lab30-nested-stack
+│
+└── Resource: LabNestedStack
+    │
+    └── Child Stack
+        │
+        └── SSM Parameter: /lab/nested/environment</code></pre>
+
+  <p>The child template was stored in an S3 bucket:</p>
+
+  <pre><code>lab-cfn-nested-templates-122445003699</code></pre>
+
+  <p>This bucket was treated as a reusable infrastructure artifact bucket for CloudFormation templates.</p>
+
+  <h2>7. Step 1 - Create the S3 Bucket for Templates</h2>
+
+  <p>A dedicated S3 bucket was created to store CloudFormation child templates:</p>
+
+  <pre><code>lab-cfn-nested-templates-122445003699</code></pre>
+
+  <p>Recommended settings:</p>
+
+  <ul>
+    <li>Region: <code>eu-north-1</code></li>
+    <li>Block all public access: enabled</li>
+    <li>Versioning: disabled for this lab</li>
+    <li>Encryption: SSE-S3</li>
+  </ul>
+
+  <div class="note">
+    In production environments, organizations often maintain a dedicated artifact bucket for CloudFormation templates, deployment packages, or infrastructure modules.
+  </div>
+
+  <h2>8. Step 2 - Create the Child Template</h2>
+
+  <p>The following file was created locally:</p>
+
+  <pre><code>lab30-child-template.yaml</code></pre>
+
+  <p>Initial child template:</p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 30 - Child template for CloudFormation Nested Stack
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: Environment name used by the nested stack
+
+Resources:
+  LabNestedParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /lab/nested/environment
+      Type: String
+      Value: !Ref EnvironmentName
+      Description: Parameter created by a nested CloudFormation stack
+
+Outputs:
+  NestedParameterName:
+    Description: Name of the SSM Parameter created by the nested stack
+    Value: !Ref LabNestedParameter</code></pre>
+
+  <p>This template creates a lightweight Systems Manager Parameter Store parameter:</p>
+
+  <pre><code>/lab/nested/environment</code></pre>
+
+  <p>The file was uploaded to the S3 bucket.</p>
+
+  <h2>9. Step 3 - Create the Parent Template</h2>
+
+  <p>The following file was created locally:</p>
+
+  <pre><code>lab30-parent-template.yaml</code></pre>
+
+  <p>Parent template:</p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 30 - Parent template for CloudFormation Nested Stack
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: Environment name passed from the parent stack to the child stack
+
+Resources:
+  LabNestedStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://lab-cfn-nested-templates-122445003699.s3.eu-north-1.amazonaws.com/lab30-child-template.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+Outputs:
+  ChildStackId:
+    Description: ID of the nested child stack
+    Value: !Ref LabNestedStack
+
+  ChildParameterName:
+    Description: Name of the SSM Parameter created by the child stack
+    Value: !GetAtt LabNestedStack.Outputs.NestedParameterName</code></pre>
+
+  <p>The key element in this template is:</p>
+
+  <pre><code>Type: AWS::CloudFormation::Stack</code></pre>
+
+  <p>This tells CloudFormation to create another stack as a resource of the parent stack.</p>
+
+  <h2>10. Step 4 - Create the Parent Stack</h2>
+
+  <p>A new CloudFormation stack was created using the parent template:</p>
+
+  <pre><code>lab30-nested-stack</code></pre>
+
+  <p>During stack creation, CloudFormation required the following acknowledgement:</p>
+
+  <ul>
+    <li><code>CAPABILITY_AUTO_EXPAND</code></li>
+  </ul>
+
+  <p>This is expected because CloudFormation needs permission to expand and process the nested template.</p>
+
+  <p>After creation, the parent stack reached:</p>
+
+  <pre><code>CREATE_COMPLETE</code></pre>
+
+  <p>The nested child stack was also created automatically and reached:</p>
+
+  <pre><code>CREATE_COMPLETE</code></pre>
+
+  <h2>11. Step 5 - Inspect the Nested Stack</h2>
+
+  <p>The nested stack was visible from the parent stack resources tab as:</p>
+
+  <pre><code>LabNestedStack</code></pre>
+
+  <p>By opening this resource, it was possible to inspect the child stack created by the parent stack.</p>
+
+  <p>This confirmed that, from the parent stack perspective, the child stack is managed as a CloudFormation resource.</p>
+
+  <h2>12. Step 6 - Update the Child Template</h2>
+
+  <p>The child template was updated to include an additional output:</p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 30 - Child template for CloudFormation Nested Stack
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: Environment name used by the nested stack
+
+Resources:
+  LabNestedParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /lab/nested/environment
+      Type: String
+      Value: !Ref EnvironmentName
+      Description: Parameter created by a nested CloudFormation stack
+
+Outputs:
+  NestedParameterName:
+    Description: Name of the SSM Parameter created by the nested stack
+    Value: !Ref LabNestedParameter
+
+  EnvironmentValue:
+    Description: Current environment value
+    Value: !Ref EnvironmentName</code></pre>
+
+  <p>The updated file was uploaded to the same S3 object, replacing the previous version:</p>
+
+  <pre><code>lab30-child-template.yaml</code></pre>
+
+  <h2>13. Step 7 - Update the Parent Stack</h2>
+
+  <p>The parent stack was updated using the same parent template file:</p>
+
+  <pre><code>lab30-parent-template.yaml</code></pre>
+
+  <p>Although the parent template did not change, the <code>TemplateURL</code> still pointed to the child template in S3. CloudFormation reprocessed the child template and updated the nested stack.</p>
+
+  <p>The expected update flow was:</p>
+
+  <pre><code>lab30-nested-stack  UPDATE_IN_PROGRESS
+LabNestedStack      UPDATE_IN_PROGRESS
+LabNestedStack      UPDATE_COMPLETE
+lab30-nested-stack  UPDATE_COMPLETE</code></pre>
+
+  <p>The child stack outputs were then updated and included:</p>
+
+  <ul>
+    <li><code>NestedParameterName</code></li>
+    <li><code>EnvironmentValue</code></li>
+  </ul>
+
+  <div class="success">
+    This validated that CloudFormation can update a nested stack through a parent stack update without recreating the entire infrastructure.
+  </div>
+
+  <h2>14. Step 8 - Cleanup</h2>
+
+  <p>The stack created for this lab was temporary and was not required for future labs.</p>
+
+  <p>The following stack could be safely deleted:</p>
+
+  <pre><code>lab30-nested-stack</code></pre>
+
+  <p>Deleting the parent stack automatically deletes:</p>
+
+  <ul>
+    <li>The child nested stack</li>
+    <li>The SSM parameter <code>/lab/nested/environment</code></li>
+  </ul>
+
+  <p>The S3 bucket should be kept for future labs:</p>
+
+  <pre><code>lab-cfn-nested-templates-122445003699</code></pre>
+
+  <div class="warning">
+    Do not delete the permanent infrastructure stack <code>lab26-asg-stack</code>, because it manages resources that are still part of the learning environment.
+  </div>
+
+  <h2>15. Final Resource Classification</h2>
+
+  <h3>Permanent Resources</h3>
+  <ul>
+    <li><code>lab26-asg-stack</code></li>
+    <li><code>launch-web-template</code></li>
+    <li><code>lab-cfn-web-asg</code></li>
+    <li><code>lab-web-alb</code></li>
+    <li><code>lab-web-tg</code></li>
+    <li><code>lab-ec2-web-sg</code></li>
+    <li><code>lab-alb-sg</code></li>
+    <li><code>lab-ec2-ssm-role</code></li>
+    <li><code>lab-cfn-nested-templates-122445003699</code></li>
+  </ul>
+
+  <h3>Temporary Lab 30 Resources</h3>
+  <ul>
+    <li><code>lab30-nested-stack</code></li>
+    <li>Automatically generated child stack</li>
+    <li><code>/lab/nested/environment</code></li>
+  </ul>
+
+  <h2>16. Key Takeaways</h2>
+
+  <ul>
+    <li>Nested Stacks are used to split large CloudFormation templates into smaller modules.</li>
+    <li>The parent stack manages the lifecycle of the child stacks.</li>
+    <li>The child template is usually stored in S3 and referenced through <code>TemplateURL</code>.</li>
+    <li>Parameters can be passed from the parent stack to the child stack.</li>
+    <li>Outputs from the child stack can be accessed from the parent stack using <code>!GetAtt NestedStack.Outputs.OutputName</code>.</li>
+    <li>Nested Stacks are different from Cross-Stack References because they are not independent stacks.</li>
+    <li>Nested Stacks are useful in enterprise environments to organize infrastructure by domain, such as network, security, compute, monitoring, and storage.</li>
+  </ul>
+
+  <h2>17. Example Enterprise Structure</h2>
+
+  <pre><code>main.yaml
+│
+├── network.yaml
+├── security.yaml
+├── compute.yaml
+├── monitoring.yaml
+├── database.yaml
+└── storage.yaml</code></pre>
+
+  <p>This structure makes infrastructure code easier to maintain, review, reuse, and evolve.</p>
+
+  <h2>18. Lab Conclusion</h2>
+
+  <p>
+    In this lab, we successfully introduced CloudFormation Nested Stacks and validated their behavior through a practical implementation.
+  </p>
+
+  <p>
+    A parent stack was created, a child template was stored in S3, and CloudFormation used <code>AWS::CloudFormation::Stack</code> to create and manage the nested child stack.
+  </p>
+
+  <p>
+    We also updated the child template and confirmed that the nested stack could be updated through the parent stack, demonstrating a realistic infrastructure modularization pattern commonly used in larger CloudFormation projects.
+  </p>
+
+</body>
+</html>
