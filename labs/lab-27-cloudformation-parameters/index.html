@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>Lab 27 - CloudFormation Parameters</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;line-height:1.6}
+h1,h2{color:#0b5394} pre{background:#f4f4f4;padding:12px}
+</style></head><body>
+<h1>Lab 27 – CloudFormation Parameters</h1>
+
+<h2>Objective</h2>
+<p>Convert an existing CloudFormation template into a reusable template by introducing Parameters and updating the infrastructure through Update Stack.</p>
+
+<h2>Environment</h2>
+<ul>
+<li>Existing stack: <code>lab26-asg-stack</code></li>
+<li>Auto Scaling Group: <code>lab-cfn-web-asg</code></li>
+<li>Launch Template: <code>launch-web-template</code></li>
+</ul>
+
+<h2>Parameters</h2>
+<pre><code>Parameters:
+
+  DesiredCapacity:
+    Type: Number
+    Default: 1
+
+  MinSize:
+    Type: Number
+    Default: 1
+
+  MaxSize:
+    Type: Number
+    Default: 2
+</code></pre>
+
+<h2>Template Changes</h2>
+<pre><code>MinSize: !Ref MinSize
+MaxSize: !Ref MaxSize
+DesiredCapacity: !Ref DesiredCapacity
+</code></pre>
+
+<h2>Validation</h2>
+<ul>
+<li>Updated the existing stack.</li>
+<li>Changed DesiredCapacity from 1 to 2 without modifying the template.</li>
+<li>Verified automatic scale-out.</li>
+<li>Changed DesiredCapacity back to 1.</li>
+<li>Verified controlled scale-in.</li>
+</ul>
+
+<h2>Concepts Learned</h2>
+<ul>
+<li>CloudFormation Parameters</li>
+<li>Default values</li>
+<li>Intrinsic function <code>!Ref</code></li>
+<li>Update Stack</li>
+<li>Reusable Infrastructure as Code</li>
+<li>Parameter-driven deployments</li>
+</ul>
+
+<h2>Conclusion</h2>
+<p>The template is now reusable because deployment-specific values are supplied as parameters instead of being hardcoded. This reflects common enterprise CloudFormation practices.</p>
+
+</body></html>

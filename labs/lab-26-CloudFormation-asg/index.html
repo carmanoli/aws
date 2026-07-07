@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 26 - CloudFormation + Auto Scaling Group</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;line-height:1.6;color:#222}
+code,pre{background:#f4f4f4;padding:2px 4px}
+pre{padding:12px;overflow:auto}
+h1,h2{color:#0b5394}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px}
+</style>
+</head>
+<body>
+<h1>Lab 26 – CloudFormation + Auto Scaling Group</h1>
+
+<h2>Objective</h2>
+<p>Create an Auto Scaling Group (ASG) using AWS CloudFormation, reuse an existing Launch Template,
+associate the ASG with an existing Target Group, and manage capacity using CloudFormation Update Stack.</p>
+
+<h2>Prerequisites</h2>
+<ul>
+<li>Launch Template: <code>launch-web-template</code> (Version 2)</li>
+<li>Application Load Balancer: <code>lab-web-alb</code></li>
+<li>Target Group: <code>lab-web-tg</code></li>
+<li>Security Groups already configured</li>
+<li>Session Manager enabled</li>
+</ul>
+
+<h2>Architecture</h2>
+<pre>
+CloudFormation
+      │
+      ▼
+Auto Scaling Group
+      │
+      ▼
+Launch Template
+      │
+      ▼
+EC2 Instances
+      │
+      ▼
+Target Group
+      │
+      ▼
+Application Load Balancer
+</pre>
+
+<h2>CloudFormation Template</h2>
+<pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 26 - CloudFormation Auto Scaling Group
+
+Resources:
+  LabWebAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: lab-cfn-web-asg
+      MinSize: '1'
+      MaxSize: '2'
+      DesiredCapacity: '1'
+      VPCZoneIdentifier:
+        - subnet-0d6b5a638e1b4b6f8
+        - subnet-0e0cd186d22846c61
+      LaunchTemplate:
+        LaunchTemplateName: launch-web-template
+        Version: '2'
+      TargetGroupARNs:
+        - arn:aws:elasticloadbalancing:eu-north-1:122445003699:targetgroup/lab-web-tg/50f8ce015d21e4c9
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 120
+      Tags:
+        - Key: Name
+          Value: lab-cfn-web-instance
+          PropagateAtLaunch: true
+</code></pre>
+
+<h2>Deployment</h2>
+<ol>
+<li>Open CloudFormation.</li>
+<li>Create a new stack.</li>
+<li>Upload the YAML template.</li>
+<li>Name the stack <code>lab26-asg-stack</code>.</li>
+<li>Wait for <code>CREATE_COMPLETE</code>.</li>
+</ol>
+
+<h2>Validation</h2>
+<ul>
+<li>Verify the ASG <code>lab-cfn-web-asg</code> exists.</li>
+<li>Confirm one EC2 instance is launched automatically.</li>
+<li>Verify the instance is automatically registered in <code>lab-web-tg</code>.</li>
+<li>Wait until the target becomes <strong>Healthy</strong>.</li>
+<li>Access the ALB DNS name to verify the application.</li>
+</ul>
+
+<h2>Update Stack</h2>
+<p>Edit the template:</p>
+<pre><code>DesiredCapacity: '2'</code></pre>
+<p>Run <strong>Update Stack</strong>. CloudFormation updates the ASG, which launches a second EC2 instance automatically.</p>
+
+<p>After validation, edit the template again:</p>
+<pre><code>DesiredCapacity: '1'</code></pre>
+<p>Run another <strong>Update Stack</strong>. The ASG performs a controlled scale-in and terminates one instance after deregistration from the Target Group.</p>
+
+<h2>Key Concepts Learned</h2>
+<ul>
+<li>Infrastructure as Code with CloudFormation</li>
+<li>Auto Scaling Group creation</li>
+<li>Launch Template reuse</li>
+<li>Automatic Target Group registration</li>
+<li>Application Load Balancer integration</li>
+<li>CloudFormation Update Stack</li>
+<li>Declarative infrastructure changes</li>
+<li>Scale-out and scale-in using Infrastructure as Code</li>
+</ul>
+
+<h2>Conclusion</h2>
+<p>This lab demonstrated how CloudFormation manages an Auto Scaling Group throughout its lifecycle.
+Unlike a standalone EC2 instance, an ASG automatically launches, registers, deregisters and terminates
+instances while maintaining the desired capacity defined in the CloudFormation template.</p>
+
+</body>
+</html>
