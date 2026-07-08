@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 32 - AWS CloudFormation Drift Detection</title>
+
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    margin:40px;
+    background:#f4f4f4;
+    color:#333;
+    line-height:1.6;
+}
+.container{
+    max-width:1100px;
+    margin:auto;
+    background:white;
+    padding:40px;
+    border-radius:8px;
+    box-shadow:0 0 10px rgba(0,0,0,.1);
+}
+h1,h2,h3{
+    color:#232F3E;
+}
+code{
+    background:#eee;
+    padding:2px 5px;
+    border-radius:4px;
+}
+pre{
+    background:#232F3E;
+    color:#fff;
+    padding:15px;
+    overflow:auto;
+    border-radius:6px;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin:20px 0;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+th{
+    background:#232F3E;
+    color:white;
+}
+.note{
+    background:#ffffdd;
+    border-left:5px solid orange;
+    padding:15px;
+    margin:20px 0;
+}
+.success{
+    background:#e8ffe8;
+    border-left:5px solid green;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Lab 32 - AWS CloudFormation Drift Detection</h1>
+
+<p>
+This lab introduces AWS CloudFormation Drift Detection, a feature used to verify
+whether deployed infrastructure still matches the CloudFormation template.
+</p>
+
+<hr>
+
+<h2>Lab Objectives</h2>
+
+<ul>
+<li>Understand Configuration Drift.</li>
+<li>Execute Drift Detection.</li>
+<li>Interpret Drift Detection results.</li>
+<li>Understand the meaning of IN_SYNC and MODIFIED.</li>
+<li>Restore infrastructure consistency.</li>
+<li>Apply Infrastructure as Code best practices.</li>
+</ul>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>CloudFormation stack <strong>lab26-asg-stack</strong>.</li>
+<li>Auto Scaling Group managed by CloudFormation.</li>
+<li>One running EC2 instance.</li>
+<li>Launch Template version 2.</li>
+<li>Application Load Balancer.</li>
+<li>Target Group.</li>
+</ul>
+
+<hr>
+
+<h2>Environment</h2>
+
+<table>
+
+<tr>
+<th>Component</th>
+<th>Name</th>
+</tr>
+
+<tr>
+<td>CloudFormation Stack</td>
+<td>lab26-asg-stack</td>
+</tr>
+
+<tr>
+<td>Auto Scaling Group</td>
+<td>lab-cfn-web-asg</td>
+</tr>
+
+<tr>
+<td>Launch Template</td>
+<td>launch-web-template</td>
+</tr>
+
+<tr>
+<td>Target Group</td>
+<td>lab-web-tg</td>
+</tr>
+
+<tr>
+<td>Load Balancer</td>
+<td>lab-web-alb</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>What is Configuration Drift?</h2>
+
+<p>
+
+CloudFormation assumes that the template is the single source of truth.
+
+Whenever a resource is modified manually using the AWS Console, AWS CLI, or API,
+its actual configuration may no longer match the template.
+
+This situation is called <strong>Configuration Drift</strong>.
+
+</p>
+
+<hr>
+
+<h2>Drift Detection Workflow</h2>
+
+<ol>
+
+<li>Deploy infrastructure using CloudFormation.</li>
+
+<li>Modify a managed resource manually.</li>
+
+<li>Run Drift Detection.</li>
+
+<li>Review the detected differences.</li>
+
+<li>Restore the resource to the expected state.</li>
+
+<li>Verify the stack returns to <strong>IN_SYNC</strong>.</li>
+
+</ol>
+
+<hr>
+
+<h2>Step 1 - Verify Stack Status</h2>
+
+<p>
+
+The CloudFormation stack was confirmed to be operational before testing.
+
+</p>
+
+<p>
+
+Status:
+
+</p>
+
+<pre>
+UPDATE_COMPLETE
+</pre>
+
+<hr>
+
+<h2>Step 2 - Simulate Configuration Drift</h2>
+
+<p>
+
+A manual tag was added directly to the Auto Scaling Group.
+
+</p>
+
+<table>
+
+<tr>
+<th>Key</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>DriftTest</td>
+<td>Manual</td>
+</tr>
+
+</table>
+
+<p>
+
+This modification was intentionally performed outside CloudFormation.
+
+</p>
+
+<hr>
+
+<h2>Step 3 - Execute Drift Detection</h2>
+
+<p>
+
+CloudFormation → Stack Actions → Detect Drift
+
+</p>
+
+<p>
+
+CloudFormation compared the deployed infrastructure against the template.
+
+</p>
+
+<hr>
+
+<h2>Step 4 - Analyze Drift Results</h2>
+
+<p>
+
+The stack status changed to:
+
+</p>
+
+<pre>
+DRIFTED
+</pre>
+
+<p>
+
+The affected resource was:
+
+</p>
+
+<pre>
+AWS::AutoScaling::AutoScalingGroup
+Logical ID: LabWebAutoScalingGroup
+</pre>
+
+<p>
+
+CloudFormation detected differences in the resource tags.
+
+</p>
+
+<hr>
+
+<h2>Observed Differences</h2>
+
+<table>
+
+<tr>
+<th>Property</th>
+<th>Expected</th>
+<th>Current</th>
+</tr>
+
+<tr>
+<td>Tags</td>
+<td>Name = lab-cfn-web-instance</td>
+<td>DriftTest = Manual</td>
+</tr>
+
+</table>
+
+<p>
+
+After removing the manual tag, CloudFormation still reported drift because the
+original <strong>Name</strong> tag had also been removed.
+
+</p>
+
+<p>
+
+This demonstrates that editing tags manually may unintentionally replace the
+complete user-defined tag set.
+
+</p>
+
+<hr>
+
+<h2>Step 5 - Restore Expected Configuration</h2>
+
+<p>
+
+The missing CloudFormation tag was recreated.
+
+</p>
+
+<table>
+
+<tr>
+<th>Key</th>
+<th>Value</th>
+<th>Propagate At Launch</th>
+</tr>
+
+<tr>
+<td>Name</td>
+<td>lab-cfn-web-instance</td>
+<td>True</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Step 6 - Execute Drift Detection Again</h2>
+
+<p>
+
+After restoring the expected configuration, Drift Detection was executed again.
+
+</p>
+
+<p>
+
+Final status:
+
+</p>
+
+<pre>
+IN_SYNC
+</pre>
+
+<hr>
+
+<h2>CloudFormation Drift States</h2>
+
+<table>
+
+<tr>
+<th>Status</th>
+<th>Description</th>
+</tr>
+
+<tr>
+<td>IN_SYNC</td>
+<td>The deployed resource matches the CloudFormation template.</td>
+</tr>
+
+<tr>
+<td>MODIFIED</td>
+<td>The resource exists but differs from the template.</td>
+</tr>
+
+<tr>
+<td>DELETED</td>
+<td>The resource was manually deleted outside CloudFormation.</td>
+</tr>
+
+<tr>
+<td>NOT_CHECKED</td>
+<td>The resource type does not support Drift Detection or was not evaluated.</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Lessons Learned</h2>
+
+<ul>
+
+<li>CloudFormation templates are the source of truth.</li>
+
+<li>Manual changes introduce Configuration Drift.</li>
+
+<li>Drift Detection identifies property-level differences.</li>
+
+<li>Drift Detection does not automatically repair infrastructure.</li>
+
+<li>Infrastructure should be corrected by restoring the expected configuration or by updating the CloudFormation template.</li>
+
+<li>Avoid manual modifications to CloudFormation-managed resources whenever possible.</li>
+
+</ul>
+
+<hr>
+
+<h2>Best Practices</h2>
+
+<ul>
+
+<li>Manage infrastructure exclusively through Infrastructure as Code.</li>
+
+<li>Run Drift Detection periodically.</li>
+
+<li>Investigate every detected drift before applying updates.</li>
+
+<li>Keep CloudFormation templates under version control.</li>
+
+<li>Restrict manual console changes in production environments.</li>
+
+</ul>
+
+<hr>
+
+<h2>AWS Services Used</h2>
+
+<ul>
+
+<li>AWS CloudFormation</li>
+
+<li>Amazon EC2 Auto Scaling</li>
+
+<li>Amazon EC2</li>
+
+</ul>
+
+<hr>
+
+<div class="success">
+
+<h2>Lab Completed Successfully</h2>
+
+<p>
+
+The CloudFormation stack returned to the <strong>IN_SYNC</strong> state after
+restoring the expected configuration, demonstrating how Drift Detection can
+identify and validate configuration consistency in Infrastructure as Code
+environments.
+
+</p>
+
+</div>
+
+</div>
+
+</body>
+</html>
