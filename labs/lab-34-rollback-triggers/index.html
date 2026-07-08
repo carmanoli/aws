@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 34 - CloudFormation Rollback Triggers</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #222; max-width: 1100px; margin: 0 auto; padding: 30px; }
+    h1, h2, h3 { color: #1f2937; }
+    h1 { border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+    h2 { margin-top: 35px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+    code, pre { background: #f3f4f6; border-radius: 5px; }
+    code { padding: 2px 5px; }
+    pre { padding: 15px; overflow-x: auto; border: 1px solid #ddd; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #f3f4f6; }
+    .note { background: #eef6ff; border-left: 5px solid #2563eb; padding: 12px 16px; margin: 20px 0; }
+    .warning { background: #fff7ed; border-left: 5px solid #f97316; padding: 12px 16px; margin: 20px 0; }
+    .success { background: #ecfdf5; border-left: 5px solid #10b981; padding: 12px 16px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+<h1>Lab 34 - CloudFormation Rollback Triggers</h1>
+
+<h2>1. Lab Objective</h2>
+<p>The objective of this lab is to understand and validate AWS CloudFormation Rollback Triggers using Amazon CloudWatch Alarms.</p>
+<p>Rollback Triggers allow CloudFormation to monitor one or more CloudWatch Alarms during a stack creation or update. If any configured alarm enters the <code>ALARM</code> state, CloudFormation automatically rolls back the operation.</p>
+
+<h2>2. Context</h2>
+<p>This lab continues from the previous CloudFormation labs. The existing infrastructure is managed mainly through the stack:</p>
+<pre><code>lab26-asg-stack</code></pre>
+
+<p>The current permanent infrastructure includes:</p>
+<ul>
+  <li>CloudFormation stack: <code>lab26-asg-stack</code></li>
+  <li>Auto Scaling Group: <code>lab-cfn-web-asg</code></li>
+  <li>Launch Template: <code>launch-web-template</code>, version 2</li>
+  <li>Application Load Balancer: <code>lab-web-alb</code></li>
+  <li>Target Group: <code>lab-web-tg</code></li>
+  <li>Systems Manager Session Manager administration only</li>
+  <li>SSH disabled</li>
+  <li>One active EC2 instance managed by the Auto Scaling Group</li>
+</ul>
+
+<h2>3. Concepts Covered</h2>
+<ul>
+  <li>CloudFormation Rollback Triggers</li>
+  <li>CloudWatch Alarms as deployment health signals</li>
+  <li>Custom CloudWatch metrics</li>
+  <li>Automatic rollback during stack updates</li>
+  <li>Difference between Stack Policies and Rollback Triggers</li>
+</ul>
+
+<h2>4. Technical Decision</h2>
+<p>At first, a CloudWatch Alarm based on EC2 CPU utilization was considered. However, CPU-based alarms are not reliable for this lab because the EC2 instance may remain almost idle and never cross the threshold during the CloudFormation update window.</p>
+
+<div class="note">
+  <p>For this reason, a custom CloudWatch metric was used. This allows the alarm state to be controlled manually and makes the rollback test deterministic.</p>
+</div>
+
+<h2>5. Initial CloudWatch Alarm Attempt</h2>
+<p>A CPU-based alarm was created with the following configuration:</p>
+<ul>
+  <li>Metric: <code>CPUUtilization</code></li>
+  <li>Statistic: <code>Average</code></li>
+  <li>Period: <code>1 minute</code></li>
+  <li>Condition: greater than <code>95</code></li>
+  <li>Datapoints to alarm: <code>1 out of 1</code></li>
+  <li>Alarm name: <code>lab-rollback-trigger-alarm</code></li>
+  <li>No SNS notification configured</li>
+</ul>
+
+<p>This alarm was useful to understand the interface, but it was not ideal for the rollback simulation.</p>
+
+<h2>6. Important Console Detail</h2>
+<p>When adding a rollback trigger in the CloudFormation console, the alarm must be referenced by its full ARN, not only by its name.</p>
+
+<p>Incorrect value:</p>
+<pre><code>lab-rollback-trigger-alarm</code></pre>
+
+<p>Correct value format:</p>
+<pre><code>arn:aws:cloudwatch:eu-north-1:122445003699:alarm:lab-rollback-trigger-alarm</code></pre>
+
+<div class="warning">
+  <p>If only the alarm name is used, CloudFormation returns the validation error:</p>
+  <pre><code>ARNs must start with 'arn:'</code></pre>
+</div>
+
+<h2>7. Creating a Custom CloudWatch Metric</h2>
+<p>A custom metric was published using AWS CloudShell:</p>
+
+<pre><code>aws cloudwatch put-metric-data \
+  --namespace Lab/Rollback \
+  --metric-name DeploymentHealth \
+  --value 0</code></pre>
+
+<p>The custom metric represents deployment health:</p>
+<ul>
+  <li><code>0</code> means healthy</li>
+  <li><code>1</code> means unhealthy</li>
+</ul>
+
+<h2>8. Creating the Controlled Rollback Alarm</h2>
+<p>A new CloudWatch Alarm was created based on the custom metric:</p>
+
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Alarm name</td><td><code>lab-rollback-custom-alarm</code></td></tr>
+  <tr><td>Namespace</td><td><code>Lab/Rollback</code></td></tr>
+  <tr><td>Metric name</td><td><code>DeploymentHealth</code></td></tr>
+  <tr><td>Statistic</td><td><code>Average</code></td></tr>
+  <tr><td>Period</td><td><code>1 minute</code></td></tr>
+  <tr><td>Condition</td><td>Greater than <code>0</code></td></tr>
+  <tr><td>Datapoints to alarm</td><td><code>1 out of 1</code></td></tr>
+  <tr><td>Notification</td><td>None</td></tr>
+</table>
+
+<p>The metric was published again with value <code>0</code> until the alarm entered the <code>OK</code> state.</p>
+
+<pre><code>aws cloudwatch put-metric-data \
+  --namespace Lab/Rollback \
+  --metric-name DeploymentHealth \
+  --value 0</code></pre>
+
+<h2>9. Configuring the Rollback Trigger</h2>
+<p>The CloudFormation stack <code>lab26-asg-stack</code> was updated using the current template. In the stack options page, the following rollback configuration was applied:</p>
+
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Rollback trigger</td><td>ARN of <code>lab-rollback-custom-alarm</code></td></tr>
+  <tr><td>Monitoring time</td><td><code>1 minute</code></td></tr>
+</table>
+
+<p>The update completed successfully with:</p>
+<pre><code>UPDATE_COMPLETE</code></pre>
+
+<h2>10. Simulating a Failed Deployment</h2>
+<p>To trigger a real CloudFormation update, the parameter <code>DesiredCapacity</code> was changed from:</p>
+
+<pre><code>1</code></pre>
+
+<p>to:</p>
+
+<pre><code>2</code></pre>
+
+<p>As soon as the stack entered <code>UPDATE_IN_PROGRESS</code>, the custom metric was changed to an unhealthy value:</p>
+
+<pre><code>aws cloudwatch put-metric-data \
+  --namespace Lab/Rollback \
+  --metric-name DeploymentHealth \
+  --value 1</code></pre>
+
+<p>This caused the alarm <code>lab-rollback-custom-alarm</code> to enter the <code>ALARM</code> state.</p>
+
+<h2>11. Observed CloudFormation Rollback</h2>
+<p>The stack events showed that the update was automatically rolled back:</p>
+
+<pre><code>UPDATE_ROLLBACK_IN_PROGRESS
+UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS
+UPDATE_ROLLBACK_COMPLETE</code></pre>
+
+<p>The relevant event message was:</p>
+
+<pre><code>The following resource(s) failed to update: [LabWebAutoScalingGroup].</code></pre>
+
+<p>The Auto Scaling Group resource also showed:</p>
+
+<pre><code>Resource skipped during UpdateRollback</code></pre>
+
+<div class="success">
+  <p>This confirms that the Rollback Trigger worked correctly. CloudFormation detected the alarm state and reverted the update automatically.</p>
+</div>
+
+<h2>12. Restoring the Alarm to Healthy State</h2>
+<p>After the rollback test, the custom metric was restored to a healthy value:</p>
+
+<pre><code>aws cloudwatch put-metric-data \
+  --namespace Lab/Rollback \
+  --metric-name DeploymentHealth \
+  --value 0</code></pre>
+
+<p>After one or two minutes, the alarm returned to:</p>
+
+<pre><code>OK</code></pre>
+
+<h2>13. Stack Policies vs Rollback Triggers</h2>
+
+<table>
+  <tr>
+    <th>Stack Policies</th>
+    <th>Rollback Triggers</th>
+  </tr>
+  <tr>
+    <td>Protect resources from being updated.</td>
+    <td>Monitor health during stack operations.</td>
+  </tr>
+  <tr>
+    <td>Act before a resource update is allowed.</td>
+    <td>Act during or after an update.</td>
+  </tr>
+  <tr>
+    <td>Based on update permissions for resources.</td>
+    <td>Based on CloudWatch Alarm state.</td>
+  </tr>
+  <tr>
+    <td>Prevent accidental changes to critical resources.</td>
+    <td>Automatically roll back unhealthy deployments.</td>
+  </tr>
+  <tr>
+    <td>Useful for protecting databases, ASGs, IAM roles, and networking resources.</td>
+    <td>Useful for CI/CD, application health checks, error rates, latency, and custom deployment metrics.</td>
+  </tr>
+</table>
+
+<h2>14. Real-World Use Cases</h2>
+<p>Rollback Triggers are useful in enterprise environments where infrastructure updates are automated and must be automatically reverted if health signals degrade.</p>
+
+<p>Typical examples include:</p>
+<ul>
+  <li>Application error rate increases after deployment</li>
+  <li>Load balancer target health becomes unhealthy</li>
+  <li>Latency exceeds an acceptable threshold</li>
+  <li>CPU or memory utilization becomes abnormal</li>
+  <li>A custom deployment metric reports failure</li>
+  <li>A CI/CD pipeline publishes a custom health metric during deployment</li>
+</ul>
+
+<h2>15. Final State</h2>
+<p>At the end of the lab:</p>
+<ul>
+  <li>The rollback trigger was successfully configured.</li>
+  <li>The rollback was successfully tested.</li>
+  <li>The custom CloudWatch alarm was restored to <code>OK</code>.</li>
+  <li>The CloudFormation stack ended in <code>UPDATE_ROLLBACK_COMPLETE</code> after the test rollback.</li>
+  <li>The Auto Scaling Group returned to the previous desired state.</li>
+  <li>The infrastructure remained consistent and protected.</li>
+</ul>
+
+<h2>16. Key Lessons Learned</h2>
+<ul>
+  <li>Rollback Triggers are configured at stack operation level.</li>
+  <li>CloudFormation requires the full CloudWatch Alarm ARN.</li>
+  <li>Rollback Triggers do not prevent changes; they monitor health and roll back if necessary.</li>
+  <li>Custom CloudWatch metrics are useful for deterministic lab simulations.</li>
+  <li>Stack Policies and Rollback Triggers solve different problems and complement each other.</li>
+  <li>This feature is especially important in automated deployment pipelines.</li>
+</ul>
+
+<h2>17. Recommended Next Lab</h2>
+<p>The recommended next lab is:</p>
+
+<pre><code>Lab 35 - CloudFormation DeletionPolicy</code></pre>
+
+<p>This lab should cover the behavior of CloudFormation when stacks or resources are deleted, including <code>Delete</code>, <code>Retain</code>, and <code>Snapshot</code> policies.</p>
+
+</body>
+</html>

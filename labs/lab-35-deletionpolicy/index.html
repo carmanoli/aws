@@ -1,0 +1,373 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 35 - AWS CloudFormation DeletionPolicy</title>
+
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    line-height:1.6;
+    max-width:1100px;
+    margin:auto;
+    padding:40px;
+    color:#333;
+}
+h1,h2,h3{
+    color:#232F3E;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 4px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+.note{
+    background:#eef7ff;
+    border-left:5px solid #0073bb;
+    padding:15px;
+    margin:20px 0;
+}
+.warning{
+    background:#fff4e5;
+    border-left:5px solid #ff9900;
+    padding:15px;
+    margin:20px 0;
+}
+.success{
+    background:#ecf8ec;
+    border-left:5px solid #2e7d32;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>Lab 35 - AWS CloudFormation DeletionPolicy</h1>
+
+<p>
+This lab explores the <strong>DeletionPolicy</strong> attribute in AWS CloudFormation.
+DeletionPolicy defines what happens to a resource when the CloudFormation stack is deleted or when the resource is removed from the template.
+</p>
+
+<hr>
+
+<h2>Lab Objectives</h2>
+
+<ul>
+<li>Understand the DeletionPolicy attribute.</li>
+<li>Study Delete, Retain and Snapshot behaviors.</li>
+<li>Observe CloudFormation resource deletion.</li>
+<li>Identify which AWS resources support Snapshot.</li>
+<li>Compare DeletionPolicy with UpdateReplacePolicy.</li>
+<li>Use temporary resources to avoid affecting the production lab infrastructure.</li>
+<li>Keep the AWS account clean after completing the lab.</li>
+</ul>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>AWS Account</li>
+<li>AWS CloudFormation</li>
+<li>Amazon S3</li>
+<li>Amazon EC2</li>
+<li>Existing permanent CloudFormation infrastructure from previous labs</li>
+</ul>
+
+<hr>
+
+<h2>DeletionPolicy Overview</h2>
+
+<p>
+DeletionPolicy controls the lifecycle of resources when CloudFormation deletes them.
+</p>
+
+<table>
+
+<tr>
+<th>DeletionPolicy</th>
+<th>Behavior</th>
+</tr>
+
+<tr>
+<td>Delete</td>
+<td>Delete the resource.</td>
+</tr>
+
+<tr>
+<td>Retain</td>
+<td>Keep the resource after the stack is deleted.</td>
+</tr>
+
+<tr>
+<td>Snapshot</td>
+<td>Create a snapshot before deleting the resource.</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Part 1 – Delete Policy</h2>
+
+<p>Create the following temporary stack:</p>
+
+<pre>
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+
+  Lab35DeleteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+
+    Properties:
+      BucketName: !Sub "lab35-deletionpolicy-delete-${AWS::AccountId}-${AWS::Region}"
+</pre>
+
+<h3>Expected Result</h3>
+
+<ul>
+<li>Stack created successfully.</li>
+<li>S3 bucket created.</li>
+</ul>
+
+<p>Delete the stack.</p>
+
+<h3>Observed Result</h3>
+
+<ul>
+<li>CloudFormation deleted the stack.</li>
+<li>The S3 bucket was automatically deleted.</li>
+</ul>
+
+<div class="success">
+DeletionPolicy Delete removes both the CloudFormation resource and the physical AWS resource.
+</div>
+
+<hr>
+
+<h2>Part 2 – Retain Policy</h2>
+
+<pre>
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+
+  Lab35RetainBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+
+    Properties:
+      BucketName: !Sub "lab35-deletionpolicy-retain-${AWS::AccountId}-${AWS::Region}"
+</pre>
+
+<h3>Expected Result</h3>
+
+<ul>
+<li>Stack created.</li>
+<li>S3 bucket created.</li>
+</ul>
+
+<p>Delete the stack.</p>
+
+<h3>Observed Result</h3>
+
+<ul>
+<li>Stack deleted.</li>
+<li>S3 bucket remained.</li>
+<li>Bucket no longer managed by CloudFormation.</li>
+</ul>
+
+<div class="success">
+Retain protects the physical resource from accidental deletion.
+</div>
+
+<hr>
+
+<h2>Part 3 – Snapshot Policy</h2>
+
+<pre>
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+
+  Lab35EBSVolume:
+    Type: AWS::EC2::Volume
+
+    DeletionPolicy: Snapshot
+
+    Properties:
+      AvailabilityZone: eu-north-1a
+      Size: 1
+      VolumeType: gp3
+</pre>
+
+<h3>Expected Result</h3>
+
+<ul>
+<li>EBS volume created.</li>
+<li>Volume remained unattached.</li>
+</ul>
+
+<p>Delete the stack.</p>
+
+<h3>Observed Result</h3>
+
+<ul>
+<li>The EBS volume was deleted.</li>
+<li>A snapshot was automatically created.</li>
+</ul>
+
+<div class="success">
+Snapshot provides backup protection before CloudFormation removes the resource.
+</div>
+
+<hr>
+
+<h2>Resources Supporting Snapshot</h2>
+
+<p>Common supported resources include:</p>
+
+<ul>
+<li>Amazon EBS Volumes</li>
+<li>Amazon RDS DB Instances</li>
+<li>Amazon RDS DB Clusters</li>
+<li>Other storage-related resources supporting snapshots</li>
+</ul>
+
+<p>Resources such as S3 buckets, Security Groups, IAM Roles, Load Balancers and Auto Scaling Groups do not support Snapshot.</p>
+
+<hr>
+
+<h2>DeletionPolicy vs UpdateReplacePolicy</h2>
+
+<table>
+
+<tr>
+<th>DeletionPolicy</th>
+<th>UpdateReplacePolicy</th>
+</tr>
+
+<tr>
+<td>Applies when a stack is deleted.</td>
+<td>Applies when CloudFormation replaces a resource during an update.</td>
+</tr>
+
+<tr>
+<td>Protects deleted resources.</td>
+<td>Protects replaced resources.</td>
+</tr>
+
+<tr>
+<td>Useful for preserving data after stack deletion.</td>
+<td>Useful for preserving data during infrastructure updates.</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Enterprise Best Practices</h2>
+
+<p>Typical production configurations:</p>
+
+<pre>
+DeletionPolicy: Retain
+UpdateReplacePolicy: Retain
+</pre>
+
+<p>or</p>
+
+<pre>
+DeletionPolicy: Snapshot
+UpdateReplacePolicy: Snapshot
+</pre>
+
+<p>
+These configurations help protect critical business data during both stack deletion and infrastructure replacement.
+</p>
+
+<hr>
+
+<h2>AWS Console Observation</h2>
+
+<p>
+During this lab it was observed that uploading templates through the AWS CloudFormation console automatically stores copies inside an AWS-managed bucket named:
+</p>
+
+<pre>
+cf-templates-xxxxxxxx-region
+</pre>
+
+<p>
+These uploaded templates are temporary artifacts created by the console and are not part of the managed infrastructure.
+Deleting this bucket does not affect existing CloudFormation stacks.
+The bucket is recreated automatically the next time a template is uploaded.
+</p>
+
+<hr>
+
+<h2>Cleanup</h2>
+
+<p>The following temporary resources were removed:</p>
+
+<ul>
+<li>Delete Policy stack</li>
+<li>Retain Policy S3 bucket</li>
+<li>Snapshot Policy stack</li>
+<li>EBS Snapshot</li>
+<li>Temporary Nested Stack template bucket</li>
+<li>Temporary Cross-Stack Reference consumer stack</li>
+</ul>
+
+<p>The permanent infrastructure remained unchanged.</p>
+
+<hr>
+
+<h2>Skills Learned</h2>
+
+<ul>
+<li>CloudFormation DeletionPolicy</li>
+<li>Delete behavior</li>
+<li>Retain behavior</li>
+<li>Snapshot behavior</li>
+<li>CloudFormation resource lifecycle</li>
+<li>Enterprise data protection strategies</li>
+<li>Difference between DeletionPolicy and UpdateReplacePolicy</li>
+<li>AWS Console template upload behavior</li>
+</ul>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+In this lab we explored one of the most important resource lifecycle controls available in AWS CloudFormation.
+Understanding when to use Delete, Retain and Snapshot is essential for designing safe Infrastructure as Code deployments.
+These concepts are widely used in enterprise environments to protect business-critical data and are frequently assessed in the AWS Certified Solutions Architect – Associate (SAA-C03) certification.
+</p>
+
+</body>
+</html>
+```
