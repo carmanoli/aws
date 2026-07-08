@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 31 - AWS CloudFormation Change Sets</title>
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    margin:40px;
+    line-height:1.6;
+    color:#333;
+}
+h1,h2,h3{
+    color:#1f4e79;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 4px;
+}
+pre{
+    background:#f4f4f4;
+    border:1px solid #ddd;
+    padding:15px;
+    overflow-x:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-top:15px;
+    margin-bottom:25px;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+.note{
+    background:#eef6ff;
+    border-left:5px solid #1f4e79;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Lab 31 - AWS CloudFormation Change Sets</h1>
+
+<h2>Objective</h2>
+
+<p>
+The objective of this lab is to learn how AWS CloudFormation Change Sets allow administrators to preview infrastructure changes before applying them to a running stack.
+</p>
+
+<p>
+Instead of updating a stack immediately, CloudFormation generates an execution plan showing exactly which resources will be modified, replaced, created or deleted.
+</p>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>Lab 30 completed</li>
+<li>Existing CloudFormation stack: <b>lab26-asg-stack</b></li>
+<li>Auto Scaling Group managed by CloudFormation</li>
+<li>Launch Template Version 2</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>AWS Systems Manager Session Manager configured</li>
+</ul>
+
+<hr>
+
+<h2>Existing Infrastructure</h2>
+
+<ul>
+<li>CloudFormation Stack</li>
+<li>Launch Template</li>
+<li>Auto Scaling Group</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Security Groups</li>
+<li>IAM Role</li>
+<li>CloudTrail</li>
+<li>CloudWatch</li>
+<li>SNS</li>
+<li>Parameter Store</li>
+</ul>
+
+<hr>
+
+<h2>Part 1 - Understanding Change Sets</h2>
+
+<p>
+A Change Set is a preview of the actions CloudFormation will perform before updating an existing stack.
+</p>
+
+<p>
+Rather than modifying resources immediately, CloudFormation first compares the existing stack with the updated template and produces an execution plan.
+</p>
+
+<div class="note">
+In production environments, infrastructure teams commonly review Change Sets before approving deployments.
+</div>
+
+<hr>
+
+<h2>Part 2 - First Change Set</h2>
+
+<p>
+A new Output was added to the template:
+</p>
+
+<pre>
+StackLastUpdated:
+  Description: Demonstration output for Change Sets
+  Value: "Lab31"
+</pre>
+
+<p>
+A Change Set was created using the updated template.
+</p>
+
+<p>
+CloudFormation reported:
+</p>
+
+<pre>
+Resource Changes: 0
+
+No changes
+There are no resources to be changed
+</pre>
+
+<h3>Explanation</h3>
+
+<p>
+Outputs are not CloudFormation resources.
+Changing Outputs does not modify the deployed infrastructure.
+Therefore no resource changes are reported.
+</p>
+
+<hr>
+
+<h2>Part 3 - Creating a Real Resource Change</h2>
+
+<p>
+To demonstrate an actual infrastructure modification, the following property was changed:
+</p>
+
+<pre>
+HealthCheckGracePeriod:
+120
+
+Changed to
+
+HealthCheckGracePeriod:
+150
+</pre>
+
+<p>
+A new Change Set was created.
+</p>
+
+CloudFormation reported:
+
+<table>
+<tr>
+<th>Property</th>
+<th>Value</th>
+</tr>
+
+<tr>
+<td>Logical ID</td>
+<td>LabWebAutoScalingGroup</td>
+</tr>
+
+<tr>
+<td>Action</td>
+<td>Modify</td>
+</tr>
+
+<tr>
+<td>Resource Type</td>
+<td>AWS::AutoScaling::AutoScalingGroup</td>
+</tr>
+
+<tr>
+<td>Replacement</td>
+<td>False</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Understanding the Result</h2>
+
+<p>
+The Change Set confirmed that:
+</p>
+
+<ul>
+<li>The Auto Scaling Group would be modified.</li>
+<li>No new resources would be created.</li>
+<li>No resources would be deleted.</li>
+<li>No replacement would occur.</li>
+<li>The EC2 instance would remain unchanged.</li>
+<li>The Load Balancer would remain attached.</li>
+</ul>
+
+<p>
+This preview allows administrators to evaluate deployment impact before execution.
+</p>
+
+<hr>
+
+<h2>Executing the Change Set</h2>
+
+<p>
+After reviewing the proposed modifications, the Change Set was executed.
+</p>
+
+<p>
+CloudFormation updated the existing Auto Scaling Group in place without recreating any infrastructure resources.
+</p>
+
+<hr>
+
+<h2>Verifying the Update</h2>
+
+<p>
+The updated property can be verified using:
+</p>
+
+<ul>
+<li>CloudFormation Template</li>
+<li>EC2 Console → Auto Scaling Groups → Details</li>
+<li>AWS CLI</li>
+</ul>
+
+<p>CLI example:</p>
+
+<pre>
+aws autoscaling describe-auto-scaling-groups \
+--auto-scaling-group-names lab-cfn-web-asg
+</pre>
+
+Expected output:
+
+<pre>
+"HealthCheckGracePeriod": 150
+</pre>
+
+<hr>
+
+<h2>Update Stack vs Change Set</h2>
+
+<table>
+
+<tr>
+<th>Update Stack</th>
+<th>Change Set</th>
+</tr>
+
+<tr>
+<td>Applies changes immediately.</td>
+<td>Creates a deployment preview.</td>
+</tr>
+
+<tr>
+<td>No opportunity to inspect changes.</td>
+<td>Allows review before execution.</td>
+</tr>
+
+<tr>
+<td>Higher operational risk.</td>
+<td>Safer deployment process.</td>
+</tr>
+
+<tr>
+<td>Suitable for development.</td>
+<td>Recommended for production.</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Enterprise Best Practices</h2>
+
+<ul>
+<li>Always create a Change Set before updating production infrastructure.</li>
+<li>Review every resource marked for modification.</li>
+<li>Pay particular attention to the Replacement column.</li>
+<li>Avoid executing a Change Set that replaces critical infrastructure without planning.</li>
+<li>Use Change Sets together with version-controlled CloudFormation templates.</li>
+</ul>
+
+<hr>
+
+<h2>Key Concepts Learned</h2>
+
+<ul>
+<li>CloudFormation Change Sets</li>
+<li>Previewing infrastructure changes</li>
+<li>Resource modification analysis</li>
+<li>Modify versus Replace operations</li>
+<li>Safe deployment workflow</li>
+<li>Enterprise Infrastructure as Code practices</li>
+</ul>
+
+<hr>
+
+<h2>Services Used</h2>
+
+<ul>
+<li>AWS CloudFormation</li>
+<li>Amazon EC2 Auto Scaling</li>
+<li>Application Load Balancer</li>
+<li>Launch Templates</li>
+</ul>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+In this lab, Change Sets were introduced as a safe deployment mechanism for AWS CloudFormation. Instead of updating infrastructure immediately, CloudFormation generated a detailed execution plan showing the exact impact of the proposed changes.
+</p>
+
+<p>
+The lab demonstrated both a Change Set with no infrastructure modifications (Outputs only) and a Change Set affecting an Auto Scaling Group without requiring resource replacement. This workflow reflects industry best practices for controlled infrastructure deployments using Infrastructure as Code.
+</p>
+
+</body>
+</html>
