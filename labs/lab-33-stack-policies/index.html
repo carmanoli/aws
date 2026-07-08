@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 33 - AWS CloudFormation Stack Policies</title>
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    margin:40px;
+    line-height:1.6;
+    color:#333;
+}
+h1,h2,h3{
+    color:#1f4e79;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 4px;
+}
+pre{
+    background:#f4f4f4;
+    border:1px solid #ddd;
+    padding:15px;
+    overflow:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:8px;
+}
+</style>
+</head>
+<body>
+
+<h1>Lab 33 - AWS CloudFormation Stack Policies</h1>
+
+<h2>Objective</h2>
+
+<p>
+Learn how CloudFormation Stack Policies protect critical infrastructure resources
+against accidental updates while still allowing controlled maintenance using
+Temporary Stack Policies.
+</p>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<ul>
+<li>AWS CloudFormation Stack already managing the Auto Scaling Group.</li>
+<li>CloudShell available.</li>
+<li>Existing stack:
+<ul>
+<li>lab26-asg-stack</li>
+</ul>
+</li>
+</ul>
+
+<hr>
+
+<h2>Architecture Before the Lab</h2>
+
+<ul>
+<li>CloudFormation Stack</li>
+<li>Launch Template</li>
+<li>Auto Scaling Group</li>
+<li>Application Load Balancer</li>
+<li>Target Group</li>
+<li>Systems Manager Session Manager</li>
+<li>CloudTrail</li>
+<li>CloudWatch</li>
+</ul>
+
+<hr>
+
+<h2>Step 1 - Create the Stack Policy</h2>
+
+<p>Create the following JSON file.</p>
+
+<pre>{
+  "Statement": [
+    {
+      "Effect": "Deny",
+      "Action": "Update:*",
+      "Principal": "*",
+      "Resource": "LogicalResourceId/LabWebAutoScalingGroup"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "Update:*",
+      "Principal": "*",
+      "Resource": "*"
+    }
+  ]
+}
+</pre>
+
+<hr>
+
+<h2>Step 2 - Apply the Stack Policy</h2>
+
+<p>
+The current AWS Console no longer exposes Stack Policy management for existing
+stacks. Therefore the policy was applied using AWS CloudShell.
+</p>
+
+<pre>aws cloudformation set-stack-policy \
+  --stack-name lab26-asg-stack \
+  --stack-policy-body file://lab33-stack-policy.json
+</pre>
+
+<p>
+The command completed successfully and the permanent Stack Policy became active.
+</p>
+
+<hr>
+
+<h2>Step 3 - Test the Protection</h2>
+
+<p>
+A CloudFormation Update Stack was executed changing:
+</p>
+
+<table>
+<tr>
+<th>Parameter</th>
+<th>Old Value</th>
+<th>New Value</th>
+</tr>
+
+<tr>
+<td>DesiredCapacity</td>
+<td>1</td>
+<td>2</td>
+</tr>
+
+</table>
+
+<p>
+Expected result:
+</p>
+
+<pre>
+Action denied by stack policy:
+Statement does not allow Update:* for
+LogicalResourceId/LabWebAutoScalingGroup
+</pre>
+
+<p>
+CloudFormation automatically rolled back the operation.
+</p>
+
+<p>
+Final stack status:
+</p>
+
+<pre>
+UPDATE_ROLLBACK_COMPLETE
+</pre>
+
+<hr>
+
+<h2>Step 4 - Create a Temporary Stack Policy</h2>
+
+<p>Create the following JSON file.</p>
+
+<pre>{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "Update:*",
+      "Principal": "*",
+      "Resource": "LogicalResourceId/LabWebAutoScalingGroup"
+    }
+  ]
+}
+</pre>
+
+<hr>
+
+<h2>Step 5 - Perform a Controlled Update</h2>
+
+<pre>aws cloudformation update-stack \
+  --stack-name lab26-asg-stack \
+  --use-previous-template \
+  --parameters \
+    ParameterKey=DesiredCapacity,ParameterValue=2 \
+    ParameterKey=MinSize,UsePreviousValue=true \
+    ParameterKey=MaxSize,UsePreviousValue=true \
+  --stack-policy-during-update-body file://lab33-temporary-stack-policy.json
+</pre>
+
+<p>
+The update completed successfully.
+</p>
+
+<p>
+The Auto Scaling Group increased its desired capacity to two instances.
+</p>
+
+<hr>
+
+<h2>Step 6 - Restore the Environment</h2>
+
+<p>
+The desired capacity was returned to one instance using the same Temporary Stack
+Policy.
+</p>
+
+<pre>aws cloudformation update-stack \
+  --stack-name lab26-asg-stack \
+  --use-previous-template \
+  --parameters \
+    ParameterKey=DesiredCapacity,ParameterValue=1 \
+    ParameterKey=MinSize,UsePreviousValue=true \
+    ParameterKey=MaxSize,UsePreviousValue=true \
+  --stack-policy-during-update-body file://lab33-temporary-stack-policy.json
+</pre>
+
+<hr>
+
+<h2>Stack Policies vs IAM Policies</h2>
+
+<table>
+
+<tr>
+<th>IAM Policy</th>
+<th>Stack Policy</th>
+</tr>
+
+<tr>
+<td>Controls what users may do.</td>
+<td>Controls what CloudFormation may modify.</td>
+</tr>
+
+<tr>
+<td>Applies account-wide.</td>
+<td>Applies only to one CloudFormation Stack.</td>
+</tr>
+
+<tr>
+<td>Protects AWS services.</td>
+<td>Protects CloudFormation-managed resources.</td>
+</tr>
+
+<tr>
+<td>Always evaluated.</td>
+<td>Evaluated only during Stack Updates.</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Enterprise Use Cases</h2>
+
+<ul>
+
+<li>Protect production databases.</li>
+
+<li>Prevent accidental replacement of Auto Scaling Groups.</li>
+
+<li>Protect Load Balancers during application deployments.</li>
+
+<li>Require explicit authorization for infrastructure modifications.</li>
+
+<li>Allow temporary exceptions during controlled maintenance windows.</li>
+
+</ul>
+
+<hr>
+
+<h2>Key Learning Outcomes</h2>
+
+<ul>
+
+<li>Understand the purpose of Stack Policies.</li>
+
+<li>Create permanent Stack Policies.</li>
+
+<li>Protect critical resources.</li>
+
+<li>Observe blocked CloudFormation updates.</li>
+
+<li>Use Temporary Stack Policies safely.</li>
+
+<li>Restore infrastructure after maintenance.</li>
+
+<li>Understand how Stack Policies complement IAM.</li>
+
+</ul>
+
+<hr>
+
+<h2>Final Infrastructure Status</h2>
+
+<ul>
+
+<li>CloudFormation Stack operational.</li>
+
+<li>Permanent Stack Policy enabled.</li>
+
+<li>Auto Scaling Group protected.</li>
+
+<li>Desired Capacity restored to 1.</li>
+
+<li>Single EC2 instance running.</li>
+
+<li>No additional AWS costs introduced.</li>
+
+</ul>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+This lab demonstrated one of the most important operational safety mechanisms
+available in AWS CloudFormation. Stack Policies protect business-critical
+resources against accidental modifications while Temporary Stack Policies allow
+controlled maintenance without permanently weakening infrastructure protection.
+These techniques are widely used in production enterprise environments.
+</p>
+
+</body>
+</html>
