@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 40 - Amazon VPC NAT Gateway using CloudFormation</title>
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    line-height:1.6;
+    max-width:1100px;
+    margin:auto;
+    padding:20px;
+    color:#333;
+}
+h1,h2,h3{
+    color:#232F3E;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+    border-left:4px solid #FF9900;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+    text-align:left;
+}
+.note{
+    background:#eef7ff;
+    border-left:5px solid #0073bb;
+    padding:10px;
+}
+.warning{
+    background:#fff3cd;
+    border-left:5px solid #ff9900;
+    padding:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Lab 40 - Amazon VPC NAT Gateway using CloudFormation</h1>
+
+<h2>Objective</h2>
+
+<p>
+In this laboratory we introduced the Amazon VPC NAT Gateway service and learned how
+private subnets can securely access the Internet without exposing their instances
+to inbound connections.
+</p>
+
+<p>
+The networking infrastructure continued to evolve using the existing
+CloudFormation networking stack created in previous laboratories.
+</p>
+
+<hr>
+
+<h2>Lab Objectives</h2>
+
+<ul>
+<li>Understand why private subnets require outbound Internet access.</li>
+<li>Understand the purpose of a NAT Gateway.</li>
+<li>Create an Elastic IP.</li>
+<li>Create a NAT Gateway using CloudFormation.</li>
+<li>Deploy the NAT Gateway inside a public subnet.</li>
+<li>Update the private Route Table.</li>
+<li>Validate changes using CloudFormation Change Sets.</li>
+<li>Understand enterprise NAT Gateway architecture.</li>
+<li>Understand NAT Gateway costs.</li>
+<li>Remove temporary resources after validation.</li>
+</ul>
+
+<hr>
+
+<h2>Initial Infrastructure</h2>
+
+<p>The custom VPC already contained:</p>
+
+<ul>
+<li>Custom VPC</li>
+<li>Internet Gateway</li>
+<li>Two Public Subnets</li>
+<li>Two Private Subnets</li>
+<li>Public Route Table</li>
+<li>Private Route Table</li>
+<li>Subnet Associations</li>
+</ul>
+
+<p>The private Route Table contained only:</p>
+
+<pre>
+10.0.0.0/16 → local
+</pre>
+
+<p>
+This meant that instances deployed inside private subnets had no Internet access.
+</p>
+
+<hr>
+
+<h2>Why is a NAT Gateway Required?</h2>
+
+<p>
+Private subnets intentionally have no route to the Internet Gateway.
+This protects backend systems from direct Internet access.
+</p>
+
+<p>
+However, many workloads still need outbound connectivity, for example:
+</p>
+
+<ul>
+<li>Operating System updates</li>
+<li>Downloading application packages</li>
+<li>Connecting to AWS APIs</li>
+<li>Retrieving software from GitHub</li>
+<li>Accessing external services</li>
+</ul>
+
+<p>
+A NAT Gateway provides outbound Internet connectivity while blocking inbound
+connections initiated from the Internet.
+</p>
+
+<hr>
+
+<h2>Network Architecture</h2>
+
+<pre>
+                Internet
+                    |
+            Internet Gateway
+                    |
+          Public Route Table
+                    |
+           Public Subnet A
+                    |
+             NAT Gateway
+                    |
+      Private Route Table
+                    |
+      -----------------------
+      |                     |
+Private Subnet A     Private Subnet B
+</pre>
+
+<hr>
+
+<h2>CloudFormation Resources Added</h2>
+
+<h3>Elastic IP</h3>
+
+<p>
+An Elastic IP provides a permanent public IP address for the NAT Gateway.
+</p>
+
+<pre>
+LabNatGatewayEIP
+Type: AWS::EC2::EIP
+</pre>
+
+<h3>NAT Gateway</h3>
+
+<p>
+The NAT Gateway was deployed inside Public Subnet A.
+</p>
+
+<pre>
+LabNatGateway
+Type: AWS::EC2::NatGateway
+</pre>
+
+<h3>Private Route</h3>
+
+<p>
+A default route was added to the private Route Table.
+</p>
+
+<pre>
+Destination:
+0.0.0.0/0
+
+Target:
+NAT Gateway
+</pre>
+
+<hr>
+
+<h2>CloudFormation Change Set</h2>
+
+<p>Before deployment a Change Set was created.</p>
+
+<p>The Change Set showed:</p>
+
+<table>
+<tr>
+<th>Resource</th>
+<th>Action</th>
+</tr>
+
+<tr>
+<td>LabNatGatewayEIP</td>
+<td>Add</td>
+</tr>
+
+<tr>
+<td>LabNatGateway</td>
+<td>Add</td>
+</tr>
+
+<tr>
+<td>LabPrivateDefaultRoute</td>
+<td>Add</td>
+</tr>
+
+</table>
+
+<p>
+No existing resources were modified or replaced.
+</p>
+
+<hr>
+
+<h2>Deployment Validation</h2>
+
+<p>
+After executing the Change Set, the stack completed successfully.
+</p>
+
+<p>The CloudFormation Resources tab showed:</p>
+
+<ul>
+<li>LabNatGateway → CREATE_COMPLETE</li>
+<li>LabNatGatewayEIP → CREATE_COMPLETE</li>
+<li>LabPrivateDefaultRoute → CREATE_COMPLETE</li>
+</ul>
+
+<hr>
+
+<h2>Route Table Validation</h2>
+
+<p>The private Route Table now contained:</p>
+
+<pre>
+10.0.0.0/16 → local
+
+0.0.0.0/0 → NAT Gateway
+</pre>
+
+<p>
+This confirmed that private subnet traffic could now reach the Internet through
+the NAT Gateway.
+</p>
+
+<hr>
+
+<h2>Packet Flow</h2>
+
+<pre>
+Private EC2
+
+↓
+
+Private Route Table
+
+↓
+
+NAT Gateway
+
+↓
+
+Internet Gateway
+
+↓
+
+Internet
+</pre>
+
+<p>
+Return traffic automatically follows the same path.
+</p>
+
+<p>
+The Internet cannot initiate connections toward the private EC2 instance.
+</p>
+
+<hr>
+
+<h2>Internet Gateway vs NAT Gateway</h2>
+
+<table>
+
+<tr>
+<th>Internet Gateway</th>
+<th>NAT Gateway</th>
+</tr>
+
+<tr>
+<td>Public connectivity</td>
+<td>Private outbound connectivity</td>
+</tr>
+
+<tr>
+<td>Allows inbound traffic</td>
+<td>Blocks inbound traffic</td>
+</tr>
+
+<tr>
+<td>Public Subnets</td>
+<td>Private Subnets</td>
+</tr>
+
+<tr>
+<td>No hourly charge</td>
+<td>Hourly and data processing charges</td>
+</tr>
+
+<tr>
+<td>Internet-facing resources</td>
+<td>Backend infrastructure</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Enterprise Best Practices</h2>
+
+<ul>
+<li>Deploy one NAT Gateway per Availability Zone.</li>
+<li>Associate each private subnet with a NAT Gateway in the same AZ.</li>
+<li>Avoid cross-AZ traffic charges.</li>
+<li>Use Infrastructure as Code for all networking resources.</li>
+<li>Validate every deployment using Change Sets.</li>
+<li>Remove temporary resources to reduce costs.</li>
+</ul>
+
+<hr>
+
+<h2>AWS Certified Solutions Architect Associate (SAA-C03)</h2>
+
+<p>
+NAT Gateway is one of the most frequently tested networking topics.
+Candidates should understand:
+</p>
+
+<ul>
+<li>Why private subnets require NAT.</li>
+<li>Difference between Internet Gateway and NAT Gateway.</li>
+<li>Why NAT Gateway must be deployed inside a public subnet.</li>
+<li>High Availability recommendations.</li>
+<li>Enterprise cost implications.</li>
+</ul>
+
+<hr>
+
+<h2>Cost Optimization</h2>
+
+<div class="warning">
+
+<p>
+Unlike Internet Gateways, NAT Gateways incur hourly charges and data processing
+charges.
+</p>
+
+<p>
+After validating the laboratory, the following resources were removed through
+CloudFormation:
+</p>
+
+<ul>
+<li>LabNatGateway</li>
+<li>LabNatGatewayEIP</li>
+<li>LabPrivateDefaultRoute</li>
+</ul>
+
+<p>
+This kept the CloudFormation stack consistent while eliminating unnecessary
+costs.
+</p>
+
+</div>
+
+<hr>
+
+<h2>Skills Acquired</h2>
+
+<ul>
+<li>Designed outbound Internet access for private subnets.</li>
+<li>Created an Elastic IP.</li>
+<li>Created a NAT Gateway.</li>
+<li>Updated Route Tables using CloudFormation.</li>
+<li>Validated infrastructure with Change Sets.</li>
+<li>Verified routing using the AWS Console.</li>
+<li>Understood enterprise NAT Gateway architecture.</li>
+<li>Compared Internet Gateway and NAT Gateway.</li>
+<li>Optimized AWS costs by removing temporary resources.</li>
+</ul>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+This laboratory completed another important milestone in building a production-style
+AWS network.
+</p>
+
+<p>
+The custom VPC now supports private subnet outbound connectivity using a NAT Gateway,
+while maintaining security through the absence of direct inbound Internet access.
+Although the NAT Gateway was removed after validation to minimize costs, the
+CloudFormation template remains ready for future deployments using the same
+Infrastructure as Code approach.
+</p>
+
+</body>
+</html>
