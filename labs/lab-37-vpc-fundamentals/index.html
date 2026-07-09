@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 37 - Amazon VPC Fundamentals</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      background: #f4f6f8;
+      color: #222;
+    }
+    header {
+      background: #232f3e;
+      color: #fff;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    main {
+      max-width: 1100px;
+      margin: 30px auto;
+      background: #fff;
+      padding: 35px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    h1, h2, h3 {
+      color: #232f3e;
+    }
+    header h1 {
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    code, pre {
+      background: #eef1f5;
+      border-radius: 5px;
+      font-family: Consolas, monospace;
+    }
+    code {
+      padding: 2px 5px;
+    }
+    pre {
+      padding: 15px;
+      overflow-x: auto;
+      border-left: 4px solid #ff9900;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      border: 1px solid #d5d9d9;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background: #eef1f5;
+    }
+    .note {
+      background: #fff8e6;
+      border-left: 4px solid #ff9900;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .success {
+      background: #eaf7ea;
+      border-left: 4px solid #2e7d32;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    footer {
+      text-align: center;
+      color: #666;
+      margin: 30px 0;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lab 37 - Amazon VPC Fundamentals</h1>
+    <p>AWS Networking Fundamentals using the existing lab infrastructure</p>
+  </header>
+
+  <main>
+    <h2>1. Lab Overview</h2>
+    <p>
+      This lab introduces the fundamental concepts of Amazon Virtual Private Cloud (Amazon VPC). Instead of creating new resources, the objective is to inspect and understand the existing network where the current AWS infrastructure is already running.
+    </p>
+    <p>
+      The current environment includes an Application Load Balancer, an Auto Scaling Group, EC2 instances, Security Groups, CloudFormation, Systems Manager Session Manager, CloudWatch, SNS, Lambda and related services. All compute resources are currently deployed inside the default VPC in the Stockholm region.
+    </p>
+
+    <h2>2. Lab Objectives</h2>
+    <ul>
+      <li>Understand the role of an Amazon VPC.</li>
+      <li>Identify the VPC used by the existing Application Load Balancer.</li>
+      <li>Identify the subnets used by the current infrastructure.</li>
+      <li>Understand public subnets and private subnets.</li>
+      <li>Understand route tables and Internet Gateway routing.</li>
+      <li>Understand CIDR blocks using real values from the existing environment.</li>
+      <li>Compare the default VPC with a production-oriented custom VPC design.</li>
+      <li>Prepare for creating a custom VPC with CloudFormation in the next lab.</li>
+    </ul>
+
+    <h2>3. Existing Infrastructure</h2>
+    <p>The existing permanent infrastructure includes:</p>
+    <ul>
+      <li>CloudFormation stack: <code>lab26-asg-stack</code></li>
+      <li>Launch Template: <code>launch-web-template</code> version 2</li>
+      <li>Auto Scaling Group: <code>lab-cfn-web-asg</code></li>
+      <li>Application Load Balancer: <code>lab-web-alb</code></li>
+      <li>Target Group: <code>lab-web-tg</code></li>
+      <li>Security Groups: <code>lab-ec2-web-sg</code> and <code>lab-alb-sg</code></li>
+      <li>IAM Role: <code>lab-ec2-ssm-role</code></li>
+      <li>CloudTrail: <code>lab-cloudtrail</code></li>
+      <li>Parameter Store value: <code>/lab/web/environment = production</code></li>
+    </ul>
+
+    <div class="note">
+      <p><strong>Important:</strong> No new AWS resources were created in this lab. The lab focused only on inspecting the current network configuration.</p>
+    </div>
+
+    <h2>4. Region Used</h2>
+    <p>The infrastructure is deployed in:</p>
+    <pre>eu-north-1 - Europe (Stockholm)</pre>
+
+    <h2>5. Identifying the VPC from the Application Load Balancer</h2>
+    <p>
+      The Application Load Balancer was used as the starting point because an internet-facing ALB must be associated with subnets in at least two Availability Zones.
+    </p>
+
+    <table>
+      <tr>
+        <th>Property</th>
+        <th>Value</th>
+      </tr>
+      <tr>
+        <td>Application Load Balancer</td>
+        <td><code>lab-web-alb</code></td>
+      </tr>
+      <tr>
+        <td>VPC ID</td>
+        <td><code>vpc-0a2830bdd2b63ed4e</code></td>
+      </tr>
+      <tr>
+        <td>Scheme</td>
+        <td><code>Internet-facing</code></td>
+      </tr>
+    </table>
+
+    <p>
+      The ALB is internet-facing, which means it can receive traffic from the Internet and forward it to the registered targets in the Target Group.
+    </p>
+
+    <h2>6. Availability Zones and Subnets</h2>
+    <p>The ALB is associated with two subnets across two Availability Zones:</p>
+
+    <table>
+      <tr>
+        <th>Availability Zone</th>
+        <th>Subnet ID</th>
+        <th>CIDR Block</th>
+      </tr>
+      <tr>
+        <td><code>eu-north-1a</code></td>
+        <td><code>subnet-0e0cd186d22846c61</code></td>
+        <td><code>172.31.16.0/20</code></td>
+      </tr>
+      <tr>
+        <td><code>eu-north-1b</code></td>
+        <td><code>subnet-0d6b5a638e1b4b6f8</code></td>
+        <td><code>172.31.32.0/20</code></td>
+      </tr>
+    </table>
+
+    <p>
+      Using two Availability Zones improves fault tolerance. If one Availability Zone becomes unavailable, the load balancer can continue serving traffic through the other Availability Zone, assuming healthy targets are available there.
+    </p>
+
+    <h2>7. Subnet Details</h2>
+    <p>The subnet configuration was inspected from the VPC console.</p>
+
+    <table>
+      <tr>
+        <th>Subnet ID</th>
+        <th>IPv4 CIDR</th>
+        <th>Route Table</th>
+        <th>Auto-assign Public IPv4</th>
+      </tr>
+      <tr>
+        <td><code>subnet-0e0cd186d22846c61</code></td>
+        <td><code>172.31.16.0/20</code></td>
+        <td><code>rtb-06e5e54ceb6256291</code></td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td><code>subnet-0d6b5a638e1b4b6f8</code></td>
+        <td><code>172.31.32.0/20</code></td>
+        <td><code>rtb-06e5e54ceb6256291</code></td>
+        <td>Yes</td>
+      </tr>
+    </table>
+
+    <p>
+      Both subnets are associated with the same route table and both have automatic public IPv4 assignment enabled.
+    </p>
+
+    <h2>8. Route Table Analysis</h2>
+    <p>The route table associated with both subnets is:</p>
+    <pre>rtb-06e5e54ceb6256291</pre>
+
+    <p>It contains the following routes:</p>
+
+    <table>
+      <tr>
+        <th>Destination</th>
+        <th>Target</th>
+        <th>Status</th>
+      </tr>
+      <tr>
+        <td><code>172.31.0.0/16</code></td>
+        <td><code>local</code></td>
+        <td>Active</td>
+      </tr>
+      <tr>
+        <td><code>0.0.0.0/0</code></td>
+        <td><code>igw-0a42945a4345f775c</code></td>
+        <td>Active</td>
+      </tr>
+    </table>
+
+    <h3>8.1 Local Route</h3>
+    <pre>172.31.0.0/16 → local</pre>
+    <p>
+      This route allows resources inside the VPC to communicate with each other using private IP addresses. Traffic that belongs to the VPC CIDR block remains inside the VPC.
+    </p>
+
+    <h3>8.2 Internet Route</h3>
+    <pre>0.0.0.0/0 → igw-0a42945a4345f775c</pre>
+    <p>
+      This route sends all non-local traffic to the Internet Gateway. This is the key route that makes the associated subnets public.
+    </p>
+
+    <div class="success">
+      <p><strong>Conclusion:</strong> The two subnets used by the ALB are public subnets because their route table contains a default route to an Internet Gateway.</p>
+    </div>
+
+    <h2>9. Internet Gateway</h2>
+    <p>The Internet Gateway identified in this lab is:</p>
+    <pre>igw-0a42945a4345f775c</pre>
+
+    <p>
+      An Internet Gateway allows communication between resources in a VPC and the Internet, provided that route tables, public IP addressing, Security Groups and Network ACLs also allow the traffic.
+    </p>
+
+    <h2>10. CIDR Block of the VPC</h2>
+    <p>The VPC uses the following IPv4 CIDR block:</p>
+    <pre>172.31.0.0/16</pre>
+
+    <p>
+      The <code>/16</code> prefix means that the first 16 bits identify the network and the remaining 16 bits are available for addressing inside the VPC.
+    </p>
+
+    <pre>2^(32 - 16) = 65,536 IPv4 addresses</pre>
+
+    <p>
+      Therefore, the default VPC has an address range from:
+    </p>
+
+    <pre>172.31.0.0 to 172.31.255.255</pre>
+
+    <h2>11. CIDR Blocks of the Subnets</h2>
+    <p>The inspected subnets use <code>/20</code> CIDR blocks:</p>
+
+    <pre>172.31.16.0/20
+172.31.32.0/20</pre>
+
+    <p>
+      A <code>/20</code> subnet leaves 12 bits for host addressing.
+    </p>
+
+    <pre>2^(32 - 20) = 4,096 IPv4 addresses</pre>
+
+    <p>
+      AWS reserves 5 IP addresses in each subnet. Therefore, each <code>/20</code> subnet provides:
+    </p>
+
+    <pre>4,096 - 5 = 4,091 usable IPv4 addresses</pre>
+
+    <h2>12. Public Subnet vs Private Subnet</h2>
+    <p>
+      A subnet is not public simply because an EC2 instance has a public IP address. A subnet is public when its associated route table has a route to an Internet Gateway.
+    </p>
+
+    <h3>Public Subnet</h3>
+    <pre>0.0.0.0/0 → Internet Gateway</pre>
+    <p>
+      Resources in a public subnet can communicate directly with the Internet if they have a public IP address and the security rules allow it.
+    </p>
+
+    <h3>Private Subnet</h3>
+    <pre>No direct route to an Internet Gateway</pre>
+    <p>
+      Resources in a private subnet do not receive direct inbound traffic from the Internet. They are typically accessed through internal services, load balancers, VPN, Direct Connect, bastion hosts or AWS Systems Manager Session Manager.
+    </p>
+
+    <h2>13. Current Architecture</h2>
+    <p>The current architecture can be represented as follows:</p>
+
+    <pre>Internet
+   │
+   ▼
+Internet Gateway
+   │
+   ▼
+Public Route Table
+   │
+   ├── Public Subnet A - 172.31.16.0/20 - eu-north-1a
+   │
+   └── Public Subnet B - 172.31.32.0/20 - eu-north-1b
+           │
+           ▼
+Application Load Balancer
+           │
+           ▼
+Target Group
+           │
+           ▼
+Auto Scaling Group
+           │
+           ▼
+EC2 Instance</pre>
+
+    <p>
+      This design is valid for learning and simple labs. It is also close to many basic AWS tutorials that use the default VPC.
+    </p>
+
+    <h2>14. Production-Oriented Architecture</h2>
+    <p>
+      In a more professional architecture, the load balancer usually remains in public subnets, while EC2 instances are placed in private subnets.
+    </p>
+
+    <pre>Internet
+   │
+   ▼
+Internet Gateway
+   │
+   ▼
+Public Subnets
+   │
+   ▼
+Application Load Balancer
+   │
+   ▼
+Private Subnets
+   │
+   ▼
+Auto Scaling Group
+   │
+   ▼
+EC2 Instances without public IP addresses</pre>
+
+    <p>
+      This reduces the attack surface because the EC2 instances are not directly reachable from the Internet.
+    </p>
+
+    <h2>15. Why Session Manager Matters</h2>
+    <p>
+      The current environment already follows an important security best practice: administration is performed through AWS Systems Manager Session Manager instead of SSH.
+    </p>
+
+    <p>This provides several benefits:</p>
+    <ul>
+      <li>No SSH key management is required.</li>
+      <li>Port 22 does not need to be open.</li>
+      <li>Access can be controlled through IAM.</li>
+      <li>Sessions can be logged and audited.</li>
+      <li>It is suitable for EC2 instances in private subnets.</li>
+    </ul>
+
+    <h2>16. NAT Gateway Concept</h2>
+    <p>
+      If EC2 instances are placed in private subnets, they cannot access the Internet directly through an Internet Gateway. For outbound access, such as installing packages or cloning a GitHub repository, a NAT Gateway is commonly used.
+    </p>
+
+    <pre>Private EC2
+   │
+   ▼
+Private Route Table
+   │
+   ▼
+NAT Gateway
+   │
+   ▼
+Internet Gateway
+   │
+   ▼
+Internet</pre>
+
+    <p>
+      However, NAT Gateway has an hourly cost and data processing cost. For this reason, it was not created in this lab.
+    </p>
+
+    <h2>17. Default VPC vs Custom VPC</h2>
+
+    <table>
+      <tr>
+        <th>Default VPC</th>
+        <th>Custom VPC</th>
+      </tr>
+      <tr>
+        <td>Created automatically by AWS</td>
+        <td>Created explicitly by the user or by Infrastructure as Code</td>
+      </tr>
+      <tr>
+        <td>Good for initial learning and quick testing</td>
+        <td>Recommended for controlled environments</td>
+      </tr>
+      <tr>
+        <td>Public subnets are usually available by default</td>
+        <td>Public and private subnets are designed intentionally</td>
+      </tr>
+      <tr>
+        <td>Less control over network design</td>
+        <td>Full control over CIDR, subnets and routing</td>
+      </tr>
+      <tr>
+        <td>Useful for simple labs</td>
+        <td>Better for production-style architecture</td>
+      </tr>
+    </table>
+
+    <h2>18. Why No Custom VPC Was Created Yet</h2>
+    <p>
+      This lab focused on understanding the current network before creating a new one. Creating a VPC, subnets, route tables, Internet Gateway and associations in the same lab would introduce too many concepts at once.
+    </p>
+
+    <p>
+      The next lab will build a custom VPC using CloudFormation. This follows the same incremental approach used throughout the learning path.
+    </p>
+
+    <h2>19. AWS Best Practices Learned</h2>
+    <ul>
+      <li>Use multiple Availability Zones for high availability.</li>
+      <li>Place internet-facing load balancers in public subnets.</li>
+      <li>Place application servers in private subnets whenever possible.</li>
+      <li>Use route tables to control subnet behavior.</li>
+      <li>Use Security Groups to control allowed traffic.</li>
+      <li>Use Systems Manager Session Manager instead of SSH when possible.</li>
+      <li>Use Infrastructure as Code to create repeatable network environments.</li>
+      <li>Avoid unnecessary NAT Gateway usage in cost-sensitive labs.</li>
+    </ul>
+
+    <h2>20. Key Concepts for SAA-C03</h2>
+    <ul>
+      <li>Amazon VPC</li>
+      <li>Default VPC</li>
+      <li>Custom VPC</li>
+      <li>CIDR block</li>
+      <li>Subnet</li>
+      <li>Public subnet</li>
+      <li>Private subnet</li>
+      <li>Route table</li>
+      <li>Internet Gateway</li>
+      <li>NAT Gateway</li>
+      <li>Availability Zone</li>
+      <li>High availability</li>
+      <li>Load Balancer placement</li>
+      <li>EC2 private networking</li>
+      <li>Session Manager access</li>
+    </ul>
+
+    <h2>21. Lab Summary</h2>
+    <p>In this lab, the existing AWS infrastructure was inspected from a networking perspective.</p>
+
+    <p>The following values were identified:</p>
+
+    <table>
+      <tr>
+        <th>Component</th>
+        <th>Value</th>
+      </tr>
+      <tr>
+        <td>VPC</td>
+        <td><code>vpc-0a2830bdd2b63ed4e</code></td>
+      </tr>
+      <tr>
+        <td>VPC CIDR</td>
+        <td><code>172.31.0.0/16</code></td>
+      </tr>
+      <tr>
+        <td>Subnet A</td>
+        <td><code>subnet-0e0cd186d22846c61 - 172.31.16.0/20</code></td>
+      </tr>
+      <tr>
+        <td>Subnet B</td>
+        <td><code>subnet-0d6b5a638e1b4b6f8 - 172.31.32.0/20</code></td>
+      </tr>
+      <tr>
+        <td>Route Table</td>
+        <td><code>rtb-06e5e54ceb6256291</code></td>
+      </tr>
+      <tr>
+        <td>Internet Gateway</td>
+        <td><code>igw-0a42945a4345f775c</code></td>
+      </tr>
+      <tr>
+        <td>ALB Scheme</td>
+        <td><code>Internet-facing</code></td>
+      </tr>
+    </table>
+
+    <p>
+      The inspected subnets are public because their route table contains a route to an Internet Gateway. The lab also introduced the difference between the current default VPC architecture and a more production-oriented custom VPC architecture.
+    </p>
+
+    <h2>22. Preparation for Lab 38</h2>
+    <p>
+      The next lab will create a custom VPC using CloudFormation. The custom VPC will be designed intentionally instead of relying on the AWS default VPC.
+    </p>
+
+    <p>The next lab should introduce:</p>
+    <ul>
+      <li>A custom VPC with CIDR <code>10.0.0.0/16</code></li>
+      <li>Two public subnets</li>
+      <li>An Internet Gateway</li>
+      <li>A public route table</li>
+      <li>Subnet route table associations</li>
+      <li>CloudFormation outputs for the VPC and subnet IDs</li>
+    </ul>
+
+    <h2>23. Conclusion</h2>
+    <p>
+      Lab 37 provided the networking foundation required before creating a custom AWS network. The current infrastructure was mapped, the default VPC was analyzed, and the core concepts of CIDR, subnets, route tables and Internet Gateway were introduced.
+    </p>
+
+    <p>
+      This lab completes the conceptual transition from compute-focused infrastructure to network-aware AWS architecture. The environment is now ready for the next step: creating a custom VPC with CloudFormation.
+    </p>
+  </main>
+
+  <footer>
+    <p>Lab 37 - Amazon VPC Fundamentals</p>
+  </footer>
+</body>
+</html>

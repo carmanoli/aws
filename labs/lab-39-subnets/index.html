@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 39 - Private Subnets</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; color: #222; }
+    h1, h2, h3 { color: #1f4e79; }
+    code, pre { background: #f4f4f4; padding: 4px 6px; border-radius: 4px; }
+    pre { padding: 14px; overflow-x: auto; border-left: 4px solid #1f4e79; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #e9f2fb; }
+    .note { background: #fff8dc; border-left: 4px solid #e0b000; padding: 12px; margin: 20px 0; }
+    .success { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 12px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+<h1>Lab 39 - Private Subnets</h1>
+
+<h2>1. Lab Objective</h2>
+<p>The objective of this lab was to introduce private subnets inside the custom VPC created in Lab 38.</p>
+<p>The existing production infrastructure remained untouched and continued to run inside the Default VPC. This lab only updated the networking stack <code>lab38-custom-vpc-stack</code>.</p>
+
+<h2>2. Architecture Before the Lab</h2>
+<ul>
+  <li>Custom VPC: <code>lab-custom-vpc</code></li>
+  <li>VPC CIDR block: <code>10.0.0.0/16</code></li>
+  <li>Public subnet A: <code>10.0.1.0/24</code></li>
+  <li>Public subnet B: <code>10.0.2.0/24</code></li>
+  <li>Internet Gateway: <code>lab-custom-igw</code></li>
+  <li>Public Route Table: <code>lab-public-route-table</code></li>
+</ul>
+
+<h2>3. New Resources Created</h2>
+<table>
+  <tr>
+    <th>Resource</th>
+    <th>Type</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td><code>lab-private-subnet-a</code></td>
+    <td>AWS::EC2::Subnet</td>
+    <td>Private subnet in Availability Zone A</td>
+  </tr>
+  <tr>
+    <td><code>lab-private-subnet-b</code></td>
+    <td>AWS::EC2::Subnet</td>
+    <td>Private subnet in Availability Zone B</td>
+  </tr>
+  <tr>
+    <td><code>lab-private-route-table</code></td>
+    <td>AWS::EC2::RouteTable</td>
+    <td>Dedicated route table for private subnets</td>
+  </tr>
+  <tr>
+    <td>Private subnet route table associations</td>
+    <td>AWS::EC2::SubnetRouteTableAssociation</td>
+    <td>Explicitly associate both private subnets with the private route table</td>
+  </tr>
+</table>
+
+<h2>4. Technical Design Decisions</h2>
+
+<h3>4.1 CIDR Blocks</h3>
+<p>The private subnets were created with separate CIDR blocks:</p>
+<ul>
+  <li><code>10.0.11.0/24</code> for <code>lab-private-subnet-a</code></li>
+  <li><code>10.0.12.0/24</code> for <code>lab-private-subnet-b</code></li>
+</ul>
+<p>These ranges are inside the main VPC CIDR block <code>10.0.0.0/16</code> and do not overlap with the public subnets.</p>
+
+<h3>4.2 Availability Zones</h3>
+<p>The private subnets were placed in the same two Availability Zones as the public subnets. This prepares the architecture for high availability, where public and private tiers can be distributed across multiple Availability Zones.</p>
+
+<h3>4.3 Public IP Assignment</h3>
+<p>The private subnets were configured with:</p>
+<pre><code>MapPublicIpOnLaunch: false</code></pre>
+<p>This prevents EC2 instances launched in these subnets from automatically receiving public IPv4 addresses.</p>
+
+<h3>4.4 Private Route Table</h3>
+<p>A dedicated private route table was created, but no default route to the Internet Gateway was added.</p>
+<p>The private route table only contains the automatic local VPC route:</p>
+<pre><code>10.0.0.0/16 → local</code></pre>
+<p>This allows communication inside the VPC, but prevents direct Internet access.</p>
+
+<div class="note">
+  <strong>Important:</strong> A subnet is considered public or private based mainly on its route table. A public subnet has a route to an Internet Gateway. A private subnet does not.
+</div>
+
+<h2>5. CloudFormation Template Additions</h2>
+
+<h3>5.1 Private Subnets</h3>
+<pre><code>LabPrivateSubnetA:
+  Type: AWS::EC2::Subnet
+  Properties:
+    VpcId: !Ref LabCustomVPC
+    CidrBlock: 10.0.11.0/24
+    AvailabilityZone: !Select [0, !GetAZs '']
+    MapPublicIpOnLaunch: false
+    Tags:
+      - Key: Name
+        Value: lab-private-subnet-a
+
+LabPrivateSubnetB:
+  Type: AWS::EC2::Subnet
+  Properties:
+    VpcId: !Ref LabCustomVPC
+    CidrBlock: 10.0.12.0/24
+    AvailabilityZone: !Select [1, !GetAZs '']
+    MapPublicIpOnLaunch: false
+    Tags:
+      - Key: Name
+        Value: lab-private-subnet-b</code></pre>
+
+<h3>5.2 Private Route Table</h3>
+<pre><code>LabPrivateRouteTable:
+  Type: AWS::EC2::RouteTable
+  Properties:
+    VpcId: !Ref LabCustomVPC
+    Tags:
+      - Key: Name
+        Value: lab-private-route-table</code></pre>
+
+<h3>5.3 Route Table Associations</h3>
+<pre><code>LabPrivateSubnetARouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref LabPrivateSubnetA
+    RouteTableId: !Ref LabPrivateRouteTable
+
+LabPrivateSubnetBRouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref LabPrivateSubnetB
+    RouteTableId: !Ref LabPrivateRouteTable</code></pre>
+
+<h3>5.4 Outputs</h3>
+<pre><code>PrivateSubnetAId:
+  Description: Private Subnet A ID
+  Value: !Ref LabPrivateSubnetA
+
+PrivateSubnetBId:
+  Description: Private Subnet B ID
+  Value: !Ref LabPrivateSubnetB
+
+PrivateRouteTableId:
+  Description: Private Route Table ID
+  Value: !Ref LabPrivateRouteTable</code></pre>
+
+<h2>6. Change Set Validation</h2>
+<p>Before executing the update, a CloudFormation Change Set was created and reviewed.</p>
+<p>The Change Set showed only new resources being added:</p>
+<ul>
+  <li><code>LabPrivateSubnetA</code> - Add</li>
+  <li><code>LabPrivateSubnetB</code> - Add</li>
+  <li><code>LabPrivateRouteTable</code> - Add</li>
+  <li><code>LabPrivateSubnetARouteTableAssociation</code> - Add</li>
+  <li><code>LabPrivateSubnetBRouteTableAssociation</code> - Add</li>
+</ul>
+<p>No existing resource was modified, replaced, or deleted.</p>
+
+<h2>7. Validation After Deployment</h2>
+<p>After executing the Change Set, the stack reached the state:</p>
+<pre><code>UPDATE_COMPLETE</code></pre>
+<p>The VPC Resource Map showed:</p>
+<ul>
+  <li>4 subnets</li>
+  <li>2 public subnets</li>
+  <li>2 private subnets</li>
+  <li>1 public route table</li>
+  <li>1 private route table</li>
+  <li>1 main route table automatically created by AWS</li>
+</ul>
+
+<h2>8. Final Architecture</h2>
+<pre><code>Internet
+   |
+Internet Gateway
+   |
+Public Route Table
+0.0.0.0/0 → IGW
+   |
+Public Subnets
+- lab-public-subnet-a
+- lab-public-subnet-b
+
+Private Route Table
+10.0.0.0/16 → local only
+   |
+Private Subnets
+- lab-private-subnet-a
+- lab-private-subnet-b</code></pre>
+
+<h2>9. Enterprise Relevance</h2>
+<p>This architecture is common in enterprise AWS environments. Public subnets are typically used for internet-facing components, such as Application Load Balancers. Private subnets are used for internal workloads, such as application servers, backend services, containers, databases, and internal APIs.</p>
+<p>This reduces the attack surface because backend resources do not have direct inbound exposure from the Internet.</p>
+
+<h2>10. SAA-C03 Relevance</h2>
+<p>This lab is highly relevant for the AWS Certified Solutions Architect - Associate exam. Common exam topics include:</p>
+<ul>
+  <li>Difference between public and private subnets</li>
+  <li>How route tables define subnet behavior</li>
+  <li>Use of Internet Gateways</li>
+  <li>Why databases should be placed in private subnets</li>
+  <li>High availability using multiple Availability Zones</li>
+  <li>Future use of NAT Gateway for outbound Internet access from private subnets</li>
+</ul>
+
+<h2>11. Cost Considerations</h2>
+<p>This lab created only VPC networking resources that do not generate significant direct cost. No NAT Gateway, EC2 instance, RDS database, or Load Balancer was created in this lab.</p>
+<p>This keeps the lab aligned with cost optimization and Free Tier awareness.</p>
+
+<h2>12. Lab Conclusion</h2>
+<div class="success">
+  Lab 39 was completed successfully. The custom VPC now contains two public subnets and two private subnets distributed across two Availability Zones. The private subnets are associated with a dedicated private route table and do not have direct Internet access.
+</div>
+
+<h2>13. Next Lab</h2>
+<p>Lab 40 will introduce the NAT Gateway concept. A NAT Gateway allows resources in private subnets to initiate outbound connections to the Internet while remaining inaccessible from inbound Internet traffic.</p>
+
+</body>
+</html>

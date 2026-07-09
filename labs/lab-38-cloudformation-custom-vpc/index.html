@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 38 - AWS CloudFormation Custom VPC</title>
+
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    max-width:1100px;
+    margin:auto;
+    line-height:1.7;
+    padding:40px;
+    color:#333;
+}
+
+h1,h2,h3{
+    color:#232F3E;
+}
+
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+}
+
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-bottom:20px;
+}
+
+table,th,td{
+    border:1px solid #ccc;
+}
+
+th,td{
+    padding:10px;
+}
+
+.note{
+    background:#eef7ff;
+    border-left:5px solid #0073bb;
+    padding:15px;
+    margin:20px 0;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>Lab 38 - CloudFormation Custom VPC</h1>
+
+<p>
+This laboratory introduces the creation of a completely custom Amazon VPC using AWS CloudFormation.
+Unlike previous labs that relied on the AWS Default VPC, this lab builds an isolated networking environment
+following AWS networking best practices.
+</p>
+
+<hr>
+
+<h2>Objectives</h2>
+
+<ul>
+<li>Create a Custom VPC using CloudFormation.</li>
+<li>Create two public subnets.</li>
+<li>Deploy the subnets across two Availability Zones.</li>
+<li>Create and attach an Internet Gateway.</li>
+<li>Create a Public Route Table.</li>
+<li>Create the default Internet route.</li>
+<li>Associate both subnets with the Route Table.</li>
+<li>Validate the deployment using a Change Set.</li>
+<li>Inspect the resulting network architecture.</li>
+</ul>
+
+<hr>
+
+<h2>Architecture</h2>
+
+<pre>
+
+                Internet
+                    |
+             Internet Gateway
+                    |
+          Public Route Table
+                    |
+        -------------------------
+        |                       |
+ Public Subnet A         Public Subnet B
+ 10.0.1.0/24             10.0.2.0/24
+        |                       |
+        -------------------------
+                 |
+           Custom VPC
+          10.0.0.0/16
+
+</pre>
+
+<hr>
+
+<h2>CloudFormation Resources</h2>
+
+<table>
+
+<tr>
+<th>Logical Resource</th>
+<th>AWS Resource</th>
+</tr>
+
+<tr>
+<td>LabCustomVPC</td>
+<td>AWS::EC2::VPC</td>
+</tr>
+
+<tr>
+<td>LabInternetGateway</td>
+<td>AWS::EC2::InternetGateway</td>
+</tr>
+
+<tr>
+<td>LabVPCGatewayAttachment</td>
+<td>AWS::EC2::VPCGatewayAttachment</td>
+</tr>
+
+<tr>
+<td>LabPublicSubnetA</td>
+<td>AWS::EC2::Subnet</td>
+</tr>
+
+<tr>
+<td>LabPublicSubnetB</td>
+<td>AWS::EC2::Subnet</td>
+</tr>
+
+<tr>
+<td>LabPublicRouteTable</td>
+<td>AWS::EC2::RouteTable</td>
+</tr>
+
+<tr>
+<td>LabDefaultPublicRoute</td>
+<td>AWS::EC2::Route</td>
+</tr>
+
+<tr>
+<td>Subnet Associations</td>
+<td>AWS::EC2::SubnetRouteTableAssociation</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Implementation Steps</h2>
+
+<h3>Step 1 - Create the CloudFormation Template</h3>
+
+<p>
+A new CloudFormation template was created containing all networking components
+required for a basic public VPC.
+</p>
+
+<h3>Step 2 - Validate with a Change Set</h3>
+
+<p>
+Instead of immediately deploying the infrastructure, a Change Set was created.
+This allowed verification of every resource that would be added before execution.
+</p>
+
+<h3>Step 3 - Execute the Stack</h3>
+
+<p>
+After validation, the Change Set was executed successfully and the stack reached
+the CREATE_COMPLETE state.
+</p>
+
+<h3>Step 4 - Validate the VPC</h3>
+
+<ul>
+<li>CIDR Block: 10.0.0.0/16</li>
+<li>DNS Resolution: Enabled</li>
+<li>DNS Hostnames: Enabled</li>
+</ul>
+
+<h3>Step 5 - Validate the Public Subnets</h3>
+
+<table>
+
+<tr>
+<th>Subnet</th>
+<th>CIDR</th>
+<th>Purpose</th>
+</tr>
+
+<tr>
+<td>lab-public-subnet-a</td>
+<td>10.0.1.0/24</td>
+<td>Availability Zone A</td>
+</tr>
+
+<tr>
+<td>lab-public-subnet-b</td>
+<td>10.0.2.0/24</td>
+<td>Availability Zone B</td>
+</tr>
+
+</table>
+
+<p>
+Both subnets automatically assign public IPv4 addresses to launched EC2 instances.
+</p>
+
+<h3>Step 6 - Validate Routing</h3>
+
+<p>
+The Route Table contains two routes:
+</p>
+
+<table>
+
+<tr>
+<th>Destination</th>
+<th>Target</th>
+</tr>
+
+<tr>
+<td>10.0.0.0/16</td>
+<td>local</td>
+</tr>
+
+<tr>
+<td>0.0.0.0/0</td>
+<td>Internet Gateway</td>
+</tr>
+
+</table>
+
+<p>
+This default route makes the associated subnets public.
+</p>
+
+<h3>Step 7 - Validate CloudFormation Outputs</h3>
+
+<ul>
+
+<li>VPCId</li>
+
+<li>VPCCidrBlock</li>
+
+<li>PublicSubnetAId</li>
+
+<li>PublicSubnetBId</li>
+
+<li>InternetGatewayId</li>
+
+<li>PublicRouteTableId</li>
+
+</ul>
+
+<hr>
+
+<h2>Networking Concepts Learned</h2>
+
+<ul>
+
+<li>Difference between Default VPC and Custom VPC.</li>
+
+<li>Private IP addressing using CIDR.</li>
+
+<li>Purpose of Internet Gateways.</li>
+
+<li>Route Tables.</li>
+
+<li>Subnet associations.</li>
+
+<li>Public subnet design.</li>
+
+<li>Availability Zone distribution.</li>
+
+<li>CloudFormation dependency management.</li>
+
+<li>Infrastructure validation using Change Sets.</li>
+
+<li>CloudFormation Outputs for future reuse.</li>
+
+</ul>
+
+<hr>
+
+<h2>AWS Best Practices</h2>
+
+<ul>
+
+<li>Always create production VPCs using Infrastructure as Code.</li>
+
+<li>Separate networking from application resources.</li>
+
+<li>Deploy resources across multiple Availability Zones.</li>
+
+<li>Use meaningful tags.</li>
+
+<li>Validate infrastructure changes using Change Sets.</li>
+
+<li>Reuse Outputs in future CloudFormation stacks.</li>
+
+<li>Keep networking modular for future expansion.</li>
+
+</ul>
+
+<hr>
+
+<h2>Enterprise Perspective</h2>
+
+<p>
+The network built in this laboratory represents the first stage of a production-ready
+AWS environment.
+Future laboratories will progressively extend this architecture by introducing
+private subnets, NAT Gateways, VPC Endpoints, Network ACLs, Flow Logs,
+and finally migrating the existing Auto Scaling Group and Application Load Balancer
+from the Default VPC into this custom network.
+</p>
+
+<hr>
+
+<h2>CloudFormation Outputs</h2>
+
+<table>
+
+<tr>
+<th>Output</th>
+<th>Description</th>
+</tr>
+
+<tr>
+<td>VPCId</td>
+<td>Custom VPC identifier</td>
+</tr>
+
+<tr>
+<td>VPCCidrBlock</td>
+<td>VPC CIDR block</td>
+</tr>
+
+<tr>
+<td>PublicSubnetAId</td>
+<td>First public subnet</td>
+</tr>
+
+<tr>
+<td>PublicSubnetBId</td>
+<td>Second public subnet</td>
+</tr>
+
+<tr>
+<td>InternetGatewayId</td>
+<td>Internet Gateway identifier</td>
+</tr>
+
+<tr>
+<td>PublicRouteTableId</td>
+<td>Route Table identifier</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Conclusion</h2>
+
+<p>
+In this laboratory, a complete custom Amazon VPC was deployed using AWS CloudFormation.
+The deployment followed Infrastructure as Code principles, was validated using a Change Set,
+and implemented a highly available networking foundation with two public subnets.
+This environment will serve as the basis for all future networking laboratories,
+ultimately replacing the AWS Default VPC with a production-grade architecture.
+</p>
+
+</body>
+</html>
