@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 36 - CloudFormation UpdateReplacePolicy</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+      color: #222;
+      background: #f7f9fb;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #232f3e;
+      color: #fff;
+      padding: 32px 48px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 30px;
+    }
+    header p {
+      margin: 8px 0 0 0;
+      color: #d5dbdb;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 40px 48px;
+    }
+    h2 {
+      color: #232f3e;
+      border-bottom: 2px solid #ff9900;
+      padding-bottom: 6px;
+      margin-top: 36px;
+    }
+    h3 {
+      color: #37475a;
+      margin-top: 28px;
+    }
+    code {
+      background: #eef2f5;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, Monaco, monospace;
+    }
+    pre {
+      background: #0f1720;
+      color: #e6edf3;
+      padding: 18px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+    .note {
+      background: #fff8e1;
+      border-left: 5px solid #ff9900;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    .success {
+      background: #e8f5e9;
+      border-left: 5px solid #2e7d32;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    .warning {
+      background: #ffebee;
+      border-left: 5px solid #c62828;
+      padding: 14px 18px;
+      margin: 20px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+    }
+    th, td {
+      border: 1px solid #d5dbdb;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef2f5;
+      color: #232f3e;
+    }
+    ul {
+      margin-top: 8px;
+    }
+    footer {
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 1px solid #d5dbdb;
+      color: #555;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Lab 36 - CloudFormation UpdateReplacePolicy</h1>
+  <p>AWS learning path - Infrastructure as Code, resource replacement and lifecycle protection</p>
+</header>
+
+<main>
+  <h2>1. Lab Overview</h2>
+  <p>
+    This lab focused on the <code>UpdateReplacePolicy</code> attribute in AWS CloudFormation.
+    The goal was to understand what happens to an old physical resource when a stack update requires CloudFormation to replace that resource.
+  </p>
+
+  <p>
+    The lab was designed as a temporary, low-cost exercise. It did not modify the permanent production-like lab infrastructure managed by the existing Auto Scaling Group stack.
+  </p>
+
+  <h2>2. Objectives</h2>
+  <ul>
+    <li>Understand the purpose of <code>UpdateReplacePolicy</code>.</li>
+    <li>Identify when CloudFormation performs a resource replacement.</li>
+    <li>Use Change Sets to validate whether an update will cause <code>Replacement: True</code>.</li>
+    <li>Demonstrate <code>UpdateReplacePolicy: Delete</code>.</li>
+    <li>Demonstrate <code>UpdateReplacePolicy: Retain</code>.</li>
+    <li>Understand when <code>UpdateReplacePolicy: Snapshot</code> can be used.</li>
+    <li>Compare <code>UpdateReplacePolicy</code> with <code>DeletionPolicy</code>.</li>
+    <li>Clean up all temporary resources created during the lab.</li>
+  </ul>
+
+  <h2>3. Initial Environment</h2>
+  <p>
+    The lab started from an existing AWS environment containing:
+  </p>
+  <ul>
+    <li>CloudFormation stack: <code>lab26-asg-stack</code></li>
+    <li>Launch Template: <code>launch-web-template</code></li>
+    <li>Auto Scaling Group: <code>lab-cfn-web-asg</code></li>
+    <li>Application Load Balancer: <code>lab-web-alb</code></li>
+    <li>Target Group: <code>lab-web-tg</code></li>
+    <li>Security Groups: <code>lab-ec2-web-sg</code> and <code>lab-alb-sg</code></li>
+    <li>IAM role for Systems Manager access</li>
+    <li>CloudWatch, SNS, CloudTrail and Parameter Store resources from previous labs</li>
+  </ul>
+
+  <div class="note">
+    The permanent infrastructure was not modified. All resources created in this lab were temporary and were removed at the end.
+  </div>
+
+  <h2>4. Concept: What is UpdateReplacePolicy?</h2>
+  <p>
+    <code>UpdateReplacePolicy</code> is a CloudFormation resource attribute that controls what happens to the old physical resource when an update operation requires replacement.
+  </p>
+
+  <p>
+    During some stack updates, CloudFormation cannot modify a resource in place. Instead, it creates a new physical resource, updates the logical resource mapping, and then processes the old physical resource according to the configured <code>UpdateReplacePolicy</code>.
+  </p>
+
+  <h3>Possible behaviours</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Policy</th>
+        <th>Behaviour</th>
+        <th>Typical use case</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Delete</code></td>
+        <td>The old resource is deleted after replacement.</td>
+        <td>Temporary or stateless resources.</td>
+      </tr>
+      <tr>
+        <td><code>Retain</code></td>
+        <td>The old resource is kept but removed from CloudFormation management.</td>
+        <td>Resources that must not be accidentally destroyed.</td>
+      </tr>
+      <tr>
+        <td><code>Snapshot</code></td>
+        <td>A snapshot is created before the old resource is deleted.</td>
+        <td>Storage resources such as EBS volumes or databases, when supported.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. UpdateReplacePolicy vs DeletionPolicy</h2>
+  <p>
+    These two attributes are related but they act in different situations.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Attribute</th>
+        <th>When it applies</th>
+        <th>Example scenario</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>DeletionPolicy</code></td>
+        <td>When a resource is removed from the template or when the stack is deleted.</td>
+        <td>Deleting a stack that contains an EBS volume.</td>
+      </tr>
+      <tr>
+        <td><code>UpdateReplacePolicy</code></td>
+        <td>When a stack update causes a resource replacement.</td>
+        <td>Changing a property that requires a new EC2 instance to be created.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    The most important rule from this lab: <code>UpdateReplacePolicy</code> only matters when the Change Set shows <code>Replacement: True</code>.
+  </div>
+
+  <h2>6. Temporary EC2 Template</h2>
+  <p>
+    To demonstrate replacement clearly, a temporary EC2 instance was created using CloudFormation.
+    The stack was named:
+  </p>
+
+  <pre><code>lab36-updatereplacepolicy-ec2</code></pre>
+
+  <p>
+    The initial template used <code>UpdateReplacePolicy: Delete</code> and <code>DeletionPolicy: Delete</code>.
+  </p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 36 - UpdateReplacePolicy using EC2 replacement
+
+Resources:
+
+  Lab36SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lab36 temporary Security Group
+      VpcId: vpc-0a2830bdd2b63ed4e
+
+  Lab36Instance:
+    Type: AWS::EC2::Instance
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      ImageId: ami-0402e980e69d5978b
+      InstanceType: t3.micro
+      SubnetId: subnet-0e0cd186d22846c61
+      SecurityGroupIds:
+        - !Ref Lab36SecurityGroup
+      Tags:
+        - Key: Name
+          Value: lab36-updatereplacepolicy-delete</code></pre>
+
+  <h2>7. Test 1 - UpdateReplacePolicy Delete</h2>
+  <p>
+    The first test used:
+  </p>
+
+  <pre><code>UpdateReplacePolicy: Delete
+DeletionPolicy: Delete</code></pre>
+
+  <p>
+    The subnet was changed to force a replacement of the EC2 instance:
+  </p>
+
+  <pre><code>SubnetId: subnet-0d6b5a638e1b4b6f8</code></pre>
+
+  <p>
+    The Change Set showed:
+  </p>
+
+  <pre><code>Lab36Instance
+Action: Modify
+Resource type: AWS::EC2::Instance
+Replacement: True
+Policy action: ReplaceAndDelete</code></pre>
+
+  <h3>Observed CloudFormation events</h3>
+  <pre><code>Lab36Instance UPDATE_COMPLETE
+lab36-updatereplacepolicy-ec2 UPDATE_COMPLETE_CLEANUP_IN_PROGRESS
+Lab36Instance DELETE_IN_PROGRESS
+Lab36Instance DELETE_COMPLETE
+lab36-updatereplacepolicy-ec2 UPDATE_COMPLETE</code></pre>
+
+  <div class="success">
+    Result: the old EC2 instance was deleted after the replacement. This validated <code>UpdateReplacePolicy: Delete</code>.
+  </div>
+
+  <h2>8. Test 2 - UpdateReplacePolicy Retain</h2>
+  <p>
+    The second test changed the policy to:
+  </p>
+
+  <pre><code>UpdateReplacePolicy: Retain
+DeletionPolicy: Delete</code></pre>
+
+  <p>
+    The template was updated as follows:
+  </p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 36 - UpdateReplacePolicy using EC2 replacement
+
+Resources:
+
+  Lab36SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lab36 temporary Security Group
+      VpcId: vpc-0a2830bdd2b63ed4e
+
+  Lab36Instance:
+    Type: AWS::EC2::Instance
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    Properties:
+      ImageId: ami-0402e980e69d5978b
+      InstanceType: t3.micro
+      SubnetId: subnet-0e0cd186d22846c61
+      SecurityGroupIds:
+        - !Ref Lab36SecurityGroup
+      Tags:
+        - Key: Name
+          Value: lab36-updatereplacepolicy-retain</code></pre>
+
+  <p>
+    The subnet change again caused a replacement. During cleanup, CloudFormation reported:
+  </p>
+
+  <pre><code>lab36-updatereplacepolicy-ec2 UPDATE_COMPLETE_CLEANUP_IN_PROGRESS
+Lab36Instance DELETE_SKIPPED
+lab36-updatereplacepolicy-ec2 UPDATE_COMPLETE</code></pre>
+
+  <div class="success">
+    Result: the old EC2 instance was retained. CloudFormation skipped deletion because <code>UpdateReplacePolicy: Retain</code> was configured.
+  </div>
+
+  <h2>9. Understanding DELETE_SKIPPED</h2>
+  <p>
+    The event <code>DELETE_SKIPPED</code> means that CloudFormation did not delete the old physical resource during replacement.
+  </p>
+
+  <p>
+    However, the retained resource is no longer managed by the stack. It still exists in the AWS account, but it is now the responsibility of the operator to track and delete it when it is no longer needed.
+  </p>
+
+  <div class="warning">
+    In real environments, retained resources can become orphaned resources. This can create unnecessary cost and operational risk if they are not tracked.
+  </div>
+
+  <h2>10. Identifying Resources Managed by CloudFormation</h2>
+  <p>
+    CloudFormation adds reserved tags to many supported resources. These tags help identify whether a resource was created by a stack:
+  </p>
+
+  <pre><code>aws:cloudformation:stack-name
+aws:cloudformation:stack-id
+aws:cloudformation:logical-id</code></pre>
+
+  <p>
+    The most reliable way to identify the currently managed physical resource is:
+  </p>
+
+  <ol>
+    <li>Open the CloudFormation stack.</li>
+    <li>Go to the Resources tab.</li>
+    <li>Find the logical resource <code>Lab36Instance</code>.</li>
+    <li>Compare the physical ID with the EC2 instance IDs.</li>
+  </ol>
+
+  <p>
+    A retained instance may still show CloudFormation-related tags, but it is no longer the current physical resource controlled by the stack.
+  </p>
+
+  <h2>11. Snapshot Behaviour</h2>
+  <p>
+    The <code>Snapshot</code> option is only supported for resource types that support snapshots.
+    Examples include:
+  </p>
+
+  <ul>
+    <li><code>AWS::EC2::Volume</code></li>
+    <li><code>AWS::RDS::DBInstance</code></li>
+    <li><code>AWS::RDS::DBCluster</code></li>
+    <li>Other storage-related resources that explicitly support snapshots</li>
+  </ul>
+
+  <p>
+    In this lab, a small EBS volume was temporarily created to investigate the snapshot scenario.
+    However, the attempted update did not produce <code>Replacement: True</code> in the Change Set.
+  </p>
+
+  <pre><code>Lab36Volume
+Action: Modify
+Resource type: AWS::EC2::Volume
+Replacement: False</code></pre>
+
+  <p>
+    Because the Change Set showed <code>Replacement: False</code>, the <code>UpdateReplacePolicy: Snapshot</code> attribute would not be triggered.
+    The Change Set was therefore deleted and the temporary stack was removed.
+  </p>
+
+  <div class="note">
+    This was an important practical lesson: do not assume that a property change will cause replacement. Always verify the Change Set before executing the update.
+  </div>
+
+  <h2>12. Temporary Snapshot Stack</h2>
+  <p>
+    The temporary snapshot stack was named:
+  </p>
+
+  <pre><code>lab36-updatereplacepolicy-snapshot</code></pre>
+
+  <p>
+    The template used was:
+  </p>
+
+  <pre><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Lab 36 - UpdateReplacePolicy Snapshot
+
+Resources:
+
+  Lab36Volume:
+    Type: AWS::EC2::Volume
+    UpdateReplacePolicy: Snapshot
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: eu-north-1a
+      Size: 1
+      VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: lab36-snapshot-volume</code></pre>
+
+  <p>
+    The stack was created successfully and later removed after the Change Set confirmed that the update would not cause replacement.
+  </p>
+
+  <h2>13. Cleanup</h2>
+  <p>
+    All temporary resources were removed at the end of the lab.
+  </p>
+
+  <h3>Cleanup actions performed</h3>
+  <ul>
+    <li>Deleted the unused Change Set for the snapshot test.</li>
+    <li>Deleted the stack <code>lab36-updatereplacepolicy-snapshot</code>.</li>
+    <li>Deleted the stack <code>lab36-updatereplacepolicy-ec2</code>.</li>
+    <li>Manually terminated the retained EC2 instance that had become orphaned after <code>DELETE_SKIPPED</code>.</li>
+  </ul>
+
+  <p>
+    After cleanup, the environment returned to the permanent infrastructure state:
+  </p>
+
+  <ul>
+    <li>Only one EC2 instance active, managed by the Auto Scaling Group.</li>
+    <li>The permanent CloudFormation stack <code>lab26-asg-stack</code> remained unchanged.</li>
+    <li>No temporary Lab 36 stacks remained active.</li>
+  </ul>
+
+  <h2>14. Key Lessons Learned</h2>
+  <ul>
+    <li><code>UpdateReplacePolicy</code> controls the old physical resource only during a replacement update.</li>
+    <li>If the Change Set shows <code>Replacement: False</code>, <code>UpdateReplacePolicy</code> is not relevant for that update.</li>
+    <li><code>Delete</code> removes the old resource after replacement.</li>
+    <li><code>Retain</code> preserves the old resource but removes it from stack management.</li>
+    <li><code>Snapshot</code> is only available for supported storage resources.</li>
+    <li>Retained resources must be tracked manually to avoid orphaned infrastructure and unnecessary costs.</li>
+    <li>Change Sets are essential before executing CloudFormation updates in professional environments.</li>
+  </ul>
+
+  <h2>15. Enterprise Best Practices</h2>
+  <ul>
+    <li>Always review Change Sets before executing updates in production.</li>
+    <li>Use <code>DeletionPolicy</code> and <code>UpdateReplacePolicy</code> together for important stateful resources.</li>
+    <li>Use <code>Retain</code> carefully, because it transfers responsibility from CloudFormation to the operations team.</li>
+    <li>Use <code>Snapshot</code> for supported storage resources where data recovery is required.</li>
+    <li>Document retained resources and include cleanup procedures.</li>
+    <li>Avoid testing lifecycle policies directly on production stacks.</li>
+    <li>Use temporary stacks to validate behaviour safely.</li>
+  </ul>
+
+  <h2>16. Final Summary</h2>
+  <p>
+    In this lab, CloudFormation <code>UpdateReplacePolicy</code> was studied and validated using temporary resources.
+    The lab successfully demonstrated <code>Delete</code> and <code>Retain</code> behaviours during EC2 instance replacement.
+  </p>
+
+  <p>
+    The lab also showed that <code>Snapshot</code> requires both a supported resource type and an actual replacement event.
+    Since the EBS volume update did not produce <code>Replacement: True</code>, the snapshot behaviour was not executed.
+  </p>
+
+  <p>
+    The most valuable practical outcome was the correct use of Change Sets as the source of truth before running CloudFormation updates.
+    This is a professional practice that reduces the risk of unexpected resource replacement, data loss, and orphaned infrastructure.
+  </p>
+
+  <footer>
+    <p>Lab 36 completed. Topic: AWS CloudFormation UpdateReplacePolicy.</p>
+  </footer>
+</main>
+</body>
+</html>
