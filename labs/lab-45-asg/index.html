@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lab 45 - Auto Scaling Group Migration to the Custom VPC</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; color: #222; }
+    h1, h2, h3 { color: #1f4e79; }
+    code, pre { background: #f4f4f4; padding: 4px; border-radius: 4px; }
+    pre { padding: 15px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #e8f1f8; }
+  </style>
+</head>
+<body>
+
+<h1>Lab 45 - Auto Scaling Group Migration to the Custom VPC</h1>
+
+<h2>1. Objective</h2>
+<p>The objective of this lab was to migrate the application layer from the Default VPC to the Custom VPC by replacing a temporary EC2 instance with an Auto Scaling Group deployed in private subnets.</p>
+
+<h2>2. Initial Architecture</h2>
+<p>Before this lab, the Custom VPC already contained public subnets, private subnets, route tables, an Application Load Balancer, a target group, VPC Flow Logs, and a temporary EC2 instance used to validate web traffic through the ALB.</p>
+
+<h2>3. Target Architecture</h2>
+<pre>
+Internet
+   |
+Application Load Balancer
+   |
+Target Group
+   |
+Auto Scaling Group
+   |
+Private Subnet A / Private Subnet B
+</pre>
+
+<h2>4. Technical Decisions</h2>
+<p>The EC2 instances were placed in private subnets because they do not need direct public access from the Internet. The Application Load Balancer remains in public subnets and forwards HTTP traffic to the instances through the target group.</p>
+
+<p>This follows a common enterprise architecture pattern where only the load balancer is Internet-facing, while application servers remain isolated in private networks.</p>
+
+<h2>5. CloudFormation Resources Added</h2>
+<p>The following resources were added to the existing CloudFormation stack:</p>
+<ul>
+  <li>A new EC2 Launch Template</li>
+  <li>A new Auto Scaling Group</li>
+</ul>
+
+<h3>Launch Template</h3>
+<pre>
+LabAutoScalingLaunchTemplate:
+  Type: AWS::EC2::LaunchTemplate
+  Properties:
+    LaunchTemplateName: lab-web-launch-template
+    LaunchTemplateData:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.micro
+      IamInstanceProfile:
+        Name: !Ref LabEC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref LabWebSecurityGroup
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: Name
+              Value: lab-web-asg-instance
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf update -y
+          dnf install -y httpd
+          systemctl enable httpd
+          systemctl start httpd
+          echo "&lt;h1&gt;Lab 45 - Auto Scaling Group&lt;/h1&gt;" &gt; /var/www/html/index.html
+          echo "&lt;p&gt;Served by Auto Scaling in Private Subnets&lt;/p&gt;" &gt;&gt; /var/www/html/index.html
+          echo "&lt;p&gt;Hostname: $(hostname)&lt;/p&gt;" &gt;&gt; /var/www/html/index.html
+</pre>
+
+<h3>Auto Scaling Group</h3>
+<pre>
+LabAutoScalingGroup:
+  Type: AWS::AutoScaling::AutoScalingGroup
+  Properties:
+    AutoScalingGroupName: lab-custom-vpc-asg
+    VPCZoneIdentifier:
+      - !Ref LabPrivateSubnetA
+      - !Ref LabPrivateSubnetB
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LabAutoScalingLaunchTemplate
+      Version: !GetAtt LabAutoScalingLaunchTemplate.LatestVersionNumber
+    MinSize: 1
+    MaxSize: 2
+    DesiredCapacity: 1
+    TargetGroupARNs:
+      - !Ref LabAlbTargetGroup
+    HealthCheckType: ELB
+    HealthCheckGracePeriod: 120
+    Tags:
+      - Key: Name
+        Value: lab-web-asg-instance
+        PropagateAtLaunch: true
+</pre>
+
+<h2>6. Change Set Validation</h2>
+<p>A CloudFormation Change Set was created before execution. The expected changes were:</p>
+<table>
+  <tr><th>Logical ID</th><th>Action</th><th>Resource Type</th></tr>
+  <tr><td>LabAutoScalingLaunchTemplate</td><td>Add</td><td>AWS::EC2::LaunchTemplate</td></tr>
+  <tr><td>LabAutoScalingGroup</td><td>Add</td><td>AWS::AutoScaling::AutoScalingGroup</td></tr>
+</table>
+
+<h2>7. Troubleshooting</h2>
+<p>After deployment, the instance created by the Auto Scaling Group initially became unhealthy in the target group.</p>
+
+<h3>Observed Symptoms</h3>
+<ul>
+  <li>The target group health check failed.</li>
+  <li>The Auto Scaling instance appeared as unhealthy.</li>
+  <li>The instance was not managed by Systems Manager.</li>
+</ul>
+
+<h3>Console Output Analysis</h3>
+<p>The EC2 console output showed that the instance failed during User Data execution. The main errors were:</p>
+<pre>
+Failed to download metadata for repo 'amazonlinux'
+Status code: 403
+No match for argument: httpd
+Failed to start httpd.service: Unit httpd.service not found
+SSM Agent unable to acquire credentials
+</pre>
+
+<h3>Root Cause</h3>
+<p>The problem was not the Auto Scaling Group, the Launch Template, the ALB, or the security groups. The root cause was the S3 Gateway Endpoint policy created in a previous lab.</p>
+
+<p>The policy was too restrictive and only allowed access to the lab S3 bucket. Amazon Linux repositories are also accessed through S3. Because the private subnet route table used the S3 Gateway Endpoint, repository access was routed through the endpoint and denied by the restrictive policy.</p>
+
+<h3>Resolution</h3>
+<p>The S3 Gateway Endpoint policy was temporarily relaxed to allow broader S3 access:</p>
+<pre>
+PolicyDocument:
+  Version: "2012-10-17"
+  Statement:
+    - Sid: AllowAllS3AccessFromVpcEndpoint
+      Effect: Allow
+      Principal: "*"
+      Action: "s3:*"
+      Resource: "*"
+</pre>
+
+<p>After the policy was updated, the Auto Scaling Group replaced the unhealthy instance. The new instance successfully installed Apache, started the web service, and passed the ALB health check.</p>
+
+<h2>8. Removal of the Temporary EC2 Instance</h2>
+<p>After the Auto Scaling Group became healthy, the temporary EC2 instance was removed from the template.</p>
+
+<p>The manual target registration was also removed from the target group:</p>
+<pre>
+Targets:
+  - Id: !Ref LabCustomVpcEC2Instance
+    Port: 80
+</pre>
+
+<p>The Auto Scaling Group now automatically registers and deregisters instances in the target group.</p>
+
+<h2>9. Final Architecture</h2>
+<pre>
+Internet
+   |
+Application Load Balancer
+   |
+Target Group
+   |
+Auto Scaling Group
+   |
+Private Subnets
+   |
+Custom VPC
+</pre>
+
+<h2>10. Enterprise Relevance</h2>
+<p>This architecture is commonly used in production environments. The ALB is public, while application instances remain private. Auto Scaling improves availability and resilience by replacing unhealthy instances automatically.</p>
+
+<p>The troubleshooting scenario was also realistic. In enterprise environments, restrictive endpoint policies, route tables, private networking, and bootstrap scripts often interact in unexpected ways.</p>
+
+<h2>11. AWS Well-Architected Framework Alignment</h2>
+<ul>
+  <li><strong>Security:</strong> Application instances are placed in private subnets and only accept traffic from the ALB security group.</li>
+  <li><strong>Reliability:</strong> Auto Scaling replaces unhealthy instances automatically.</li>
+  <li><strong>Operational Excellence:</strong> CloudFormation is used as the single source of truth.</li>
+  <li><strong>Cost Optimization:</strong> The architecture avoids unnecessary public EC2 exposure and keeps NAT Gateway disabled where not required.</li>
+</ul>
+
+<h2>12. SAA-C03 Exam Relevance</h2>
+<p>This lab covers several important AWS Certified Solutions Architect Associate topics:</p>
+<ul>
+  <li>Custom VPC design</li>
+  <li>Public and private subnet architecture</li>
+  <li>Application Load Balancer integration</li>
+  <li>Target groups and health checks</li>
+  <li>Auto Scaling Groups</li>
+  <li>Launch Templates</li>
+  <li>VPC Endpoints and endpoint policies</li>
+  <li>Troubleshooting private subnet connectivity</li>
+  <li>Infrastructure as Code with CloudFormation</li>
+</ul>
+
+<h2>13. Final State</h2>
+<p>At the end of the lab, the temporary EC2 instance was removed and the application was served exclusively by the Auto Scaling Group in private subnets.</p>
+
+<h2>14. Conclusion</h2>
+<p>Lab 45 completed the migration of the application layer into the Custom VPC. The environment now follows a production-style architecture where the ALB is public and the application instances are private, scalable, and managed by Auto Scaling.</p>
+
+<p>The lab also demonstrated an important real-world troubleshooting case involving S3 Gateway Endpoint policies and Amazon Linux repository access.</p>
+
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 44 - Application Load Balancer in a Custom VPC</title>
+
+<style>
+body{
+    font-family: Arial, Helvetica, sans-serif;
+    margin:40px;
+    line-height:1.7;
+    color:#333;
+    background:#fff;
+}
+h1,h2,h3{
+    color:#1f4e79;
+}
+code{
+    background:#f4f4f4;
+    padding:2px 5px;
+}
+pre{
+    background:#f4f4f4;
+    padding:15px;
+    overflow:auto;
+}
+table{
+    border-collapse:collapse;
+    width:100%;
+}
+table,th,td{
+    border:1px solid #ccc;
+}
+th,td{
+    padding:10px;
+}
+.section{
+    margin-top:40px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>AWS Learning Project</h1>
+<h2>Lab 44 - Application Load Balancer in the Custom VPC</h2>
+
+<hr>
+
+<h2>Objective</h2>
+
+<p>
+Deploy an Internet-facing Application Load Balancer inside the existing Custom VPC,
+associate it with a Target Group, register an EC2 instance as a target,
+and validate end-to-end connectivity.
+</p>
+
+<p>
+This lab begins the migration from the Default VPC to the Custom VPC architecture
+that will eventually host the Auto Scaling Group.
+</p>
+
+<hr>
+
+<h2>Architecture Before</h2>
+
+<pre>
+Internet
+    │
+    ▼
+EC2 Instance
+</pre>
+
+<p>
+The EC2 instance accepted HTTP traffic directly from the Internet.
+Although acceptable for testing, this is not considered a production architecture.
+</p>
+
+<hr>
+
+<h2>Architecture After</h2>
+
+<pre>
+                Internet
+                    │
+                    ▼
+      Application Load Balancer
+                    │
+                    ▼
+             Target Group
+                    │
+                    ▼
+             EC2 Test Instance
+</pre>
+
+<p>
+The Application Load Balancer becomes the only Internet-facing component.
+The EC2 instance is now protected by allowing HTTP traffic only from the ALB Security Group.
+</p>
+
+<div class="section">
+
+<h2>Existing Infrastructure Reused</h2>
+
+<ul>
+
+<li>Custom VPC</li>
+
+<li>Internet Gateway</li>
+
+<li>Public Subnet A</li>
+
+<li>Public Subnet B</li>
+
+<li>EC2 Test Instance</li>
+
+<li>Security Groups</li>
+
+<li>CloudFormation Stack</li>
+
+<li>VPC Flow Logs</li>
+
+<li>CloudWatch Logs</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>New CloudFormation Resources</h2>
+
+<table>
+
+<tr>
+<th>Resource</th>
+<th>Purpose</th>
+</tr>
+
+<tr>
+<td>LabAlbSecurityGroup</td>
+<td>Allows HTTP traffic from the Internet to the ALB.</td>
+</tr>
+
+<tr>
+<td>LabApplicationLoadBalancer</td>
+<td>Internet-facing Application Load Balancer deployed across both public subnets.</td>
+</tr>
+
+<tr>
+<td>LabAlbTargetGroup</td>
+<td>Registers the EC2 instance and performs health checks.</td>
+</tr>
+
+<tr>
+<td>LabAlbListener</td>
+<td>Listens on HTTP port 80 and forwards requests to the Target Group.</td>
+</tr>
+
+</table>
+
+</div>
+
+<div class="section">
+
+<h2>Security Improvements</h2>
+
+<p>
+Before this lab, the EC2 Security Group allowed inbound HTTP traffic from anywhere:
+</p>
+
+<pre>
+0.0.0.0/0
+</pre>
+
+<p>
+After the update, inbound HTTP traffic is allowed only from the ALB Security Group:
+</p>
+
+<pre>
+SourceSecurityGroupId: LabAlbSecurityGroup
+</pre>
+
+<p>
+This follows AWS security best practices by preventing direct Internet access to application servers.
+</p>
+
+</div>
+
+<div class="section">
+
+<h2>Validation</h2>
+
+<ul>
+
+<li>CloudFormation Change Set reviewed before execution.</li>
+
+<li>Stack updated successfully.</li>
+
+<li>Application Load Balancer created.</li>
+
+<li>Target Group created.</li>
+
+<li>HTTP Listener created.</li>
+
+<li>Target registered successfully.</li>
+
+<li>Health Check status became Healthy.</li>
+
+<li>Application successfully accessed using the ALB DNS name.</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>Enterprise Architecture</h2>
+
+<p>
+Enterprise environments rarely expose EC2 instances directly to the Internet.
+Instead, Internet traffic always enters through a Load Balancer.
+</p>
+
+<p>
+Advantages include:
+</p>
+
+<ul>
+
+<li>High Availability</li>
+
+<li>Load Distribution</li>
+
+<li>Automatic Health Checks</li>
+
+<li>Integration with Auto Scaling</li>
+
+<li>Centralized TLS termination</li>
+
+<li>Improved Security</li>
+
+<li>Simplified application scaling</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>AWS Services Used</h2>
+
+<ul>
+
+<li>Amazon EC2</li>
+
+<li>Application Load Balancer</li>
+
+<li>Elastic Load Balancing v2</li>
+
+<li>Target Groups</li>
+
+<li>Listeners</li>
+
+<li>Amazon VPC</li>
+
+<li>Security Groups</li>
+
+<li>CloudFormation</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>AWS Certified Solutions Architect (SAA-C03)</h2>
+
+<p>
+This laboratory covers several important certification topics:
+</p>
+
+<ul>
+
+<li>Application Load Balancer architecture</li>
+
+<li>Public versus Private Subnets</li>
+
+<li>Security Group design</li>
+
+<li>Target Groups</li>
+
+<li>Health Checks</li>
+
+<li>Listeners</li>
+
+<li>Multi-AZ Load Balancers</li>
+
+<li>High Availability principles</li>
+
+<li>Well-Architected Framework</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>Lessons Learned</h2>
+
+<ul>
+
+<li>An Internet-facing ALB must be deployed inside public subnets.</li>
+
+<li>Application servers should never be directly exposed to the Internet.</li>
+
+<li>Security Groups can reference other Security Groups.</li>
+
+<li>Target Groups continuously monitor application health.</li>
+
+<li>CloudFormation Change Sets reduce deployment risk.</li>
+
+<li>The ALB provides the foundation for scalable architectures.</li>
+
+</ul>
+
+</div>
+
+<div class="section">
+
+<h2>Next Lab</h2>
+
+<p>
+Lab 45 will migrate the Auto Scaling Group into the Custom VPC.
+The existing Target Group created in this lab will be reused, and the temporary EC2 instance will be removed.
+This will complete the migration from a single-instance architecture to a production-style, highly available deployment using private subnets.
+</p>
+
+</div>
+
+<hr>
+
+<p>
+Author: Carlos Oliveira<br>
+AWS Learning Project<br>
+Lab 44 - Application Load Balancer in the Custom VPC
+</p>
+
+</body>
+</html>
