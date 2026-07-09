@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AWS Lab 42 - Interface VPC Endpoints (AWS PrivateLink)</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 40px;
+        line-height: 1.7;
+        color: #333;
+        max-width: 1100px;
+        margin: auto;
+        background: #fafafa;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #1f4e79;
+      }
+      code {
+        background: #eeeeee;
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+      pre {
+        background: #272822;
+        color: #f8f8f2;
+        padding: 15px;
+        overflow-x: auto;
+        border-radius: 6px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 20px 0;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid #ccc;
+      }
+      th {
+        background: #1f4e79;
+        color: white;
+        padding: 10px;
+      }
+      td {
+        padding: 10px;
+      }
+      .note {
+        background: #fff8dc;
+        padding: 15px;
+        border-left: 5px solid orange;
+        margin: 20px 0;
+      }
+      .success {
+        background: #e8f5e9;
+        padding: 15px;
+        border-left: 5px solid green;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Lab 42 – Interface VPC Endpoints (AWS PrivateLink)</h1>
+    <h2>Objective</h2>
+    <p>
+      The objective of this laboratory was to understand how AWS PrivateLink
+      provides private connectivity to AWS services by creating Interface VPC
+      Endpoints inside private subnets.
+    </p>
+    <p>
+      Unlike Gateway Endpoints, Interface Endpoints create Elastic Network
+      Interfaces (ENIs) inside the selected subnets and allow services to be
+      reached using private IP addresses.
+    </p>
+    <hr />
+    <h2>Laboratory Objectives</h2>
+    <ul>
+      <li>Understand AWS PrivateLink.</li>
+      <li>Compare Gateway Endpoints and Interface Endpoints.</li>
+      <li>Create an Interface Endpoint using CloudFormation.</li>
+      <li>Understand why ENIs are created.</li>
+      <li>Deploy the endpoint across multiple Availability Zones.</li>
+      <li>Associate a Security Group.</li>
+      <li>Understand Private DNS.</li>
+      <li>Learn enterprise design considerations.</li>
+      <li>Remove temporary resources to avoid unnecessary charges.</li>
+    </ul>
+    <hr />
+    <h2>Architecture</h2>
+    <pre>
+ +------------------------------+ | AWS Systems Manager | +--------------+---------------+ ^ | AWS PrivateLink | +---------------+---------------+ | | ENI (10.0.11.230) ENI (10.0.12.117) | | Private Subnet A Private Subnet B | | Custom VPC (10.0.0.0/16) </pre
+    >
+    <hr />
+    <h2>Why Interface Endpoints?</h2>
+    <p>
+      Many AWS services cannot use Gateway Endpoints. Instead, they expose
+      private connectivity through AWS PrivateLink.
+    </p>
+    <p>
+      When an Interface Endpoint is created AWS automatically provisions one
+      Elastic Network Interface inside every selected subnet.
+    </p>
+    <p>
+      Applications communicate with those private IP addresses instead of using
+      the public Internet.
+    </p>
+    <hr />
+    <h2>CloudFormation Resources Created</h2>
+    <h3>Security Group</h3>
+    <pre> LabInterfaceEndpointSecurityGroup </pre>
+    <p>
+      The Security Group allowed HTTPS (TCP/443) traffic from the Custom VPC
+      CIDR.
+    </p>
+    <h3>Interface Endpoint</h3>
+    <pre> LabSsmInterfaceEndpoint </pre>
+    <p>Configuration:</p>
+    <ul>
+      <li>Endpoint Type: Interface</li>
+      <li>Service: AWS Systems Manager (SSM)</li>
+      <li>Private DNS enabled</li>
+      <li>Deployed into both private subnets</li>
+      <li>Associated with the dedicated Security Group</li>
+    </ul>
+    <hr />
+    <h2>CloudFormation Template</h2>
+    <pre>
+ LabInterfaceEndpointSecurityGroup: Type: AWS::EC2::SecurityGroup Properties: GroupDescription: Security group for Interface VPC Endpoints VpcId: !Ref LabCustomVPC SecurityGroupIngress: - IpProtocol: tcp FromPort: 443 ToPort: 443 CidrIp: 10.0.0.0/16 LabSsmInterfaceEndpoint: Type: AWS::EC2::VPCEndpoint Properties: VpcEndpointType: Interface ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm VpcId: !Ref LabCustomVPC SubnetIds: - !Ref LabPrivateSubnetA - !Ref LabPrivateSubnetB SecurityGroupIds: - !Ref LabInterfaceEndpointSecurityGroup PrivateDnsEnabled: true </pre
+    >
+    <hr />
+    <h2>CloudFormation Deployment</h2>
+    <p>The laboratory followed AWS best practices:</p>
+    <ul>
+      <li>Updated the existing stack.</li>
+      <li>Validated the template with a Change Set.</li>
+      <li>Executed the Change Set.</li>
+      <li>Verified UPDATE_COMPLETE.</li>
+    </ul>
+    <hr />
+    <h2>Elastic Network Interfaces (ENIs)</h2>
+    <p>The Interface Endpoint automatically created two ENIs:</p>
+    <table>
+      <tr>
+        <th>Availability Zone</th>
+        <th>Subnet</th>
+        <th>Private IP</th>
+      </tr>
+      <tr>
+        <td>eu-north-1a</td>
+        <td>lab-private-subnet-a</td>
+        <td>10.0.11.230</td>
+      </tr>
+      <tr>
+        <td>eu-north-1b</td>
+        <td>lab-private-subnet-b</td>
+        <td>10.0.12.117</td>
+      </tr>
+    </table>
+    <p>
+      These ENIs became the private network interfaces used by Systems Manager.
+    </p>
+    <hr />
+    <h2>Private DNS</h2>
+    <p>Private DNS was enabled during endpoint creation.</p>
+    <p>Instead of resolving:</p>
+    <pre> ssm.eu-north-1.amazonaws.com </pre>
+    <p>
+      to a public IP address, DNS resolution returned the private IP addresses
+      of the Interface Endpoint.
+    </p>
+    <p>As a result, traffic remained entirely inside the AWS network.</p>
+    <hr />
+    <h2>Gateway Endpoint vs Interface Endpoint</h2>
+    <table>
+      <tr>
+        <th>Feature</th>
+        <th>Gateway Endpoint</th>
+        <th>Interface Endpoint</th>
+      </tr>
+      <tr>
+        <td>Supported Services</td>
+        <td>S3, DynamoDB</td>
+        <td>Most AWS Services</td>
+      </tr>
+      <tr>
+        <td>Creates ENIs</td>
+        <td>No</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Uses Route Tables</td>
+        <td>Yes</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td>Uses Security Groups</td>
+        <td>No</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Requires Subnets</td>
+        <td>No</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Pricing</td>
+        <td>Free</td>
+        <td>Hourly + Data Processing</td>
+      </tr>
+    </table>
+    <hr />
+    <h2>Enterprise Considerations</h2>
+    <p>Large organizations commonly deploy Interface Endpoints for:</p>
+    <ul>
+      <li>AWS Systems Manager</li>
+      <li>Secrets Manager</li>
+      <li>CloudWatch Logs</li>
+      <li>EC2 API</li>
+      <li>Amazon ECR</li>
+      <li>AWS KMS</li>
+      <li>AWS STS</li>
+    </ul>
+    <p>
+      This architecture allows workloads running in private subnets to
+      communicate with AWS services without requiring Internet access or a NAT
+      Gateway.
+    </p>
+    <hr />
+    <h2>Cost Optimization</h2>
+    <div class="note">
+      Interface Endpoints incur hourly charges and data processing costs. To
+      avoid unnecessary expenses, the endpoint and its dedicated Security Group
+      were removed from the CloudFormation template after completing the
+      laboratory.
+    </div>
+    <hr />
+    <h2>Relation to AWS Certified Solutions Architect Associate (SAA-C03)</h2>
+    <p>
+      This topic is heavily represented in the certification exam. Candidates
+      should understand:
+    </p>
+    <ul>
+      <li>When to use Gateway Endpoints.</li>
+      <li>When to use Interface Endpoints.</li>
+      <li>How AWS PrivateLink works.</li>
+      <li>Private DNS behaviour.</li>
+      <li>Why ENIs are created.</li>
+      <li>Security Group requirements.</li>
+      <li>Cost differences between Gateway and Interface Endpoints.</li>
+    </ul>
+    <hr />
+    <h2>Skills Acquired</h2>
+    <div class="success">
+      <ul>
+        <li>Understood AWS PrivateLink.</li>
+        <li>Created an Interface VPC Endpoint.</li>
+        <li>Associated Security Groups with Interface Endpoints.</li>
+        <li>Observed ENIs automatically created by AWS.</li>
+        <li>Learned how Private DNS redirects traffic internally.</li>
+        <li>Compared Gateway and Interface Endpoints.</li>
+        <li>Applied CloudFormation Change Sets.</li>
+        <li>Applied AWS cost optimization by removing temporary resources.</li>
+      </ul>
+    </div>
+    <hr />
+    <h2>Conclusion</h2>
+    <p>
+      This laboratory introduced one of the most important networking services
+      in AWS. Interface Endpoints enable secure, private communication with AWS
+      services without exposing workloads to the Internet. Combined with Gateway
+      Endpoints, they form the foundation of highly secure enterprise VPC
+      architectures and are widely used in production environments where
+      minimizing Internet exposure and implementing least-privilege networking
+      are key design goals.
+    </p>
+  </body>
+</html>
