@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lab 47 - Private Website Deployment from Amazon S3</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1000px;margin:auto;line-height:1.6;padding:20px}
+code,pre{background:#f4f4f4;padding:2px 4px}
+pre{padding:10px;overflow:auto}
+h1,h2{color:#1f4e79}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #ccc;padding:8px}
+</style>
+</head>
+<body>
+<h1>Lab 47 – Private Website Deployment from Amazon S3</h1>
+
+<h2>Objective</h2>
+<p>Replace the GitHub-based deployment with a production-style deployment using a private Amazon S3 bucket while keeping EC2 instances inside private subnets and without requiring a NAT Gateway.</p>
+
+<h2>Architecture</h2>
+<pre>
+Private S3 Bucket
+        │
+Gateway VPC Endpoint
+        │
+EC2 Auto Scaling Group
+        │
+Apache
+        │
+Application Load Balancer
+</pre>
+
+<h2>Starting Environment</h2>
+<ul>
+<li>Custom VPC with public and private subnets</li>
+<li>Gateway VPC Endpoint for Amazon S3</li>
+<li>Application Load Balancer</li>
+<li>Launch Template and Auto Scaling Group</li>
+<li>Systems Manager Session Manager</li>
+<li>Private EC2 instances</li>
+</ul>
+
+<h2>Implementation</h2>
+
+<h3>1. IAM Least Privilege</h3>
+<p>The EC2 IAM Role was updated to allow only:</p>
+<ul>
+<li>s3:ListBucket</li>
+<li>s3:GetObject</li>
+</ul>
+
+<h3>2. Upload Website</h3>
+<p>The website was uploaded to:</p>
+<pre>s3://lab-s3-endpoint-&lt;account-id&gt;-&lt;region&gt;/website/</pre>
+
+<h3>3. Launch Template</h3>
+<p>User Data was modified to:</p>
+<ul>
+<li>Install Apache</li>
+<li>Install AWS CLI</li>
+<li>Synchronize website from S3 using <code>aws s3 sync</code></li>
+<li>Configure Apache permissions</li>
+<li>Start Apache</li>
+</ul>
+
+<h3>4. Bucket Policy</h3>
+<p>A Bucket Policy was added allowing only the EC2 IAM Role to read the website.</p>
+
+<h2>Validation</h2>
+<ul>
+<li>CloudFormation Update completed successfully.</li>
+<li>New Launch Template version created.</li>
+<li>Auto Scaling instance replaced.</li>
+<li>Target Group reported Healthy.</li>
+<li>Website served correctly through the ALB.</li>
+<li>No Internet or NAT Gateway required.</li>
+</ul>
+
+<h2>Enterprise Relevance</h2>
+<ul>
+<li>Infrastructure separated from application artifacts.</li>
+<li>Least Privilege IAM.</li>
+<li>Private deployment through VPC Endpoint.</li>
+<li>CloudFormation remains the single source of truth.</li>
+<li>Foundation for CodePipeline, CodeBuild and CodeDeploy.</li>
+</ul>
+
+<h2>AWS SAA-C03 Skills Covered</h2>
+<ul>
+<li>Amazon S3</li>
+<li>IAM Roles</li>
+<li>Bucket Policies</li>
+<li>Gateway VPC Endpoints</li>
+<li>Launch Templates</li>
+<li>Auto Scaling Groups</li>
+<li>Application Load Balancer</li>
+<li>CloudFormation</li>
+</ul>
+
+<h2>Conclusion</h2>
+<p>The application deployment process now follows a production-oriented design. Infrastructure and application artifacts are separated, EC2 instances use temporary IAM credentials, and deployments operate entirely within private networking using Amazon S3 and a Gateway VPC Endpoint.</p>
+
+</body>
+</html>
