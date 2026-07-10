@@ -1,0 +1,113 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AWS Lab 46 - Migration Cleanup and Infrastructure Consolidation</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1000px;margin:auto;line-height:1.6;padding:20px}
+h1,h2{color:#1f4e79}
+code,pre{background:#f4f4f4;padding:4px}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #ccc;padding:8px}
+</style>
+</head>
+<body>
+<h1>AWS Lab 46 – Migration Cleanup and Infrastructure Consolidation</h1>
+
+<h2>Objective</h2>
+<p>Safely validate the migration from the legacy Default VPC infrastructure to the new Custom VPC infrastructure and remove obsolete resources while maintaining service availability.</p>
+
+<h2>Initial Environment</h2>
+<ul>
+<li>Legacy CloudFormation stack: <code>lab26-asg-stack</code></li>
+<li>Production CloudFormation stack: <code>lab38-custom-vpc-stack</code></li>
+<li>Application already migrated to a Custom VPC.</li>
+<li>Instances running in private subnets behind an Internet-facing Application Load Balancer.</li>
+</ul>
+
+<h2>Validation Performed</h2>
+<ol>
+<li>Verified the Application Load Balancer DNS of the new environment.</li>
+<li>Confirmed the Target Group reported healthy targets.</li>
+<li>Verified the Auto Scaling Group deployed instances only in private subnets.</li>
+<li>Confirmed the application was served by the new infrastructure.</li>
+</ol>
+
+<h2>Legacy Infrastructure Audit</h2>
+<p>The remaining legacy resources were identified:</p>
+<ul>
+<li>Application Load Balancer: <code>lab-web-alb</code></li>
+<li>Target Group: <code>lab-web-tg</code></li>
+<li>Launch Template: <code>launch-web-template</code></li>
+<li>Legacy Security Groups in the Default VPC.</li>
+</ul>
+
+<h2>CloudFormation Cleanup</h2>
+<ul>
+<li>Validated that the new environment was fully operational.</li>
+<li>Deleted the legacy CloudFormation stack.</li>
+<li>Confirmed that the stack deletion left orphaned resources.</li>
+<li>Removed the obsolete ALB and Target Group manually.</li>
+</ul>
+
+<h2>Post-Migration Audit</h2>
+<p>The environment was audited to identify remaining legacy resources.</p>
+
+<table>
+<tr><th>Resource</th><th>Status</th></tr>
+<tr><td>Custom VPC</td><td>Active</td></tr>
+<tr><td>Application Load Balancer</td><td>Active</td></tr>
+<tr><td>Target Group</td><td>Active</td></tr>
+<tr><td>Auto Scaling Group</td><td>Active</td></tr>
+<tr><td>Launch Template</td><td>Current template retained</td></tr>
+<tr><td>Systems Manager</td><td>Administration method</td></tr>
+<tr><td>SSH</td><td>Disabled</td></tr>
+<tr><td>CloudFormation</td><td>Source of truth</td></tr>
+</table>
+
+<h2>Final Architecture</h2>
+<pre>
+Internet
+   |
+Application Load Balancer
+   |
+Target Group
+   |
+Auto Scaling Group
+   |
+EC2 Instances (Private Subnets)
+   |
+S3 Gateway Endpoint
+   |
+Amazon S3
+
+Session Manager
+CloudWatch
+VPC Flow Logs
+</pre>
+
+<h2>Enterprise Best Practices</h2>
+<ul>
+<li>Validate production before decommissioning legacy resources.</li>
+<li>Use Infrastructure as Code as the authoritative configuration.</li>
+<li>Perform post-migration audits to detect orphan resources.</li>
+<li>Remove unused resources to reduce operational cost.</li>
+<li>Maintain high availability during migrations.</li>
+</ul>
+
+<h2>AWS Certified Solutions Architect – Associate (SAA-C03)</h2>
+<ul>
+<li>Migration strategies</li>
+<li>CloudFormation lifecycle management</li>
+<li>Operational excellence</li>
+<li>Cost optimization</li>
+<li>High availability</li>
+<li>Infrastructure governance</li>
+</ul>
+
+<h2>Conclusion</h2>
+<p>The migration was successfully completed. The legacy infrastructure was decommissioned, the production environment now runs entirely inside the Custom VPC, and CloudFormation remains the single source of truth for infrastructure management.</p>
+
+</body>
+</html>
